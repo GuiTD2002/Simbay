@@ -1,0 +1,106 @@
+    def move_trajectory(self, trajectory, dt2):
+        msg = JointTrajectory()
+        msg.joint_names = self.joint_names
+        msg.header.stamp = self.node1.get_clock().now().to_msg()
+        t = 0.01
+        for pos in trajectory:
+            point = JointTrajectoryPoint()
+            point.positions = list(pos)
+            point.time_from_start = Duration(seconds=t).to_msg() 
+            t += dt2
+            msg.points.append(point)
+
+        # Publish the movement and return instantly
+        self.pub1.publish(msg)
+        self.wait_seconds(t - dt2 + 0.1) # Wait for the whole trajectory to finish plus a small buffer. Don't delete!!!!
+
+
+    
+    class KinematicMeasurementModel(BaseMeasurementModel):
+    def __init__(
+        self,
+        contact_threshold=0.4,
+        block_size=(0.25/2, 0.15/2, 0.08/2),
+        margin=0.02,
+        finger_thickness=0.017,
+        finger_width=0.02,
+        sensor_compliance_offset=0.002
+    ):
+        self.lower_threshold = contact_threshold
+        self.block_size = block_size  
+        self.margin = margin
+        self.finger_thickness = finger_thickness
+        self.finger_width = finger_width
+        self.finger_size = (self.finger_width, self.finger_thickness)
+        self.compliance_offset = sensor_compliance_offset
+
+    def compute_likelihoods(self, particles: np.ndarray, observation_payload: dict) -> np.ndarray:
+        # Unpack the observation payload
+        true_arm_pos = observation_payload["arm_pos"]
+        direction    = observation_payload["direction"]
+        real_contact = observation_payload["contact"]
+        step_size    = observation_payload["step_size"]
+
+        # Determine the sweep axis and sign
+        sweep_axis = int(np.flatnonzero(direction)[0])   
+        sweep_sign = int(direction[sweep_axis])          
+        lane_axis = 1 - sweep_axis
+
+        # Separate particles in the sweep and lane dimensions
+        p_sweep = particles[:, sweep_axis]
+        p_lane = particles[:, lane_axis]
+
+        # ==========================================
+        # SHARED MATH: THE LANE CHECK
+        # ==========================================
+        finger_min_lane = true_arm_pos[lane_axis] - (self.finger_width / 2.0)
+        finger_max_lane = true_arm_pos[lane_axis] + (self.finger_width / 2.0)
+
+        block_min_lane = p_lane - self.block_size[lane_axis]
+        block_max_lane = p_lane + self.block_size[lane_axis]
+
+        in_the_lane = (finger_min_lane <= block_max_lane) & (finger_max_lane >= block_min_lane)
+
+        block_edge = p_sweep - (sweep_sign * self.block_size[sweep_axis])
+        leading_edge = true_arm_pos[sweep_axis] + (sweep_sign * self.finger_thickness)
+
+        likelihoods = np.ones(len(particles))
+
+        # ==========================================
+        # PHASE 1: THE APPROACH (Real = 0)
+        # ==========================================
+        if real_contact == 0:
+            if sweep_sign == 1:
+                swept_past = block_edge < (leading_edge - self.margin)
+            else:  
+                swept_past = block_edge > (leading_edge + self.margin)
+
+            kill_mask = in_the_lane & swept_past
+            likelihoods[kill_mask] = 0.0001
+            return likelihoods
+
+        # ==========================================
+        # PHASE 2: THE STRIKE (Real = 1)
+        # ==========================================
+        baseline_noise = 0.01
+        sigma = baseline_noise + (step_size / np.sqrt(12))
+
+        max_weight = 0.90
+        min_weight = 0.001
+        
+        penetration_offset = step_size / 2.0
+        
+        # Incorporate both physical lag offsets (Matches 1D implementation)
+        total_backward_shift = sweep_sign * (penetration_offset + self.compliance_offset)
+        calibrated_leading_edge = true_arm_pos[sweep_axis] + (sweep_sign * self.finger_thickness) - total_backward_shift
+    
+        distances = np.abs(block_edge - calibrated_leading_edge)
+
+        raw_weights = np.exp(-(distances ** 2) / (2 * (sigma ** 2)))
+        likelihoods = (raw_weights * max_weight) + min_weight
+
+        # Particles outside the lane get crushed
+        likelihoods[~in_the_lane] = min_weight
+
+        return likelihoods
+

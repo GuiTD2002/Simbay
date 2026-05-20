@@ -1,0 +1,31 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Environments & IDEs ---
+.venv/
+venv/
+env/
+.env
+.vscode/
+.idea/
+*.swp
+
+# --- Robotics & Simulation ---
+*.log
+*.out
+*.lock
+# If you generate large MJB (compiled Mujoco) files, ignore them:
+*.mjb
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
