@@ -35,11 +35,12 @@ VIEWER_CAMERA_X = 3
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = True
-USE_RAY = False
-RAY_ADDRESS = None
+USE_RAY = True
+RAY_ADDRESS = "ray://10.42.0.6:10001"
 RAY_NUM_GPUS = 1.0
+RAY_DEBUG = True
 
-NUM_PARTICLES = 400
+NUM_PARTICLES = 500
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -92,6 +93,7 @@ def create_particle_filter(limits, dt):
             **kwargs,
             num_gpus=RAY_NUM_GPUS,
             ray_address=RAY_ADDRESS,
+            debug=RAY_DEBUG,
         )
 
     return build_warp_particle_filter(**kwargs)

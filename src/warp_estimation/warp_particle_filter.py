@@ -1,201 +1,305 @@
-from typing import Tuple
-from typing import Union
+"""
+Warp particle-filter builders.
+
+The normal path builds the filter in the current process. The Ray path keeps
+the same small particle-filter interface but runs the Warp filter in a Ray
+actor, which is useful when you want GPU process isolation.
+"""
+
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 
-from src.estimation import BaseMeasurementModel
-from src.estimation import BaseMotionModel
+from src.estimation.particle_filter import ParticleFilterRegularized
+from src.warp_estimation.warp_container import WarpRobotContainer
+from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
+from src.warp_estimation.warp_motion import WarpPositionMotionModel
 
-# Create a custom Type Alias so the code is easy to read
-Bounds = float | np.ndarray
 
-class ParticleFilterRegularized:
+def build_warp_particle_filter(
+    num_particles: int,
+    limits: tuple[Any, Any],
+    object_props: dict[str, Any],
+    dt: float,
+    ess_threshold: float,
+    *,
+    nconmax: int | None = None,
+    njmax: int | None = None,
+    device: str | None = "cuda:0",
+) -> ParticleFilterRegularized:
+    """Build a Warp-backed particle filter in the current process."""
+    container = WarpRobotContainer(
+        num_particles=num_particles,
+        props=object_props,
+        dt=dt,
+        nconmax=nconmax,
+        njmax=njmax,
+        device=device,
+    )
+
+    return ParticleFilterRegularized(
+        num_particles=num_particles,
+        state_bounds=limits,
+        motion_model=WarpPositionMotionModel(container),
+        measurement_model=WarpBinaryContactMeasurementModel(container),
+        ess_threshold_ratio=ess_threshold,
+    )
+
+
+def build_ray_warp_particle_filter(
+    num_particles: int,
+    limits: tuple[Any, Any],
+    object_props: dict[str, Any],
+    dt: float,
+    ess_threshold: float,
+    *,
+    nconmax: int | None = None,
+    njmax: int | None = None,
+    device: str | None = "cuda:0",
+    num_gpus: float = 1.0,
+    ray_address: str | None = None,
+    debug: bool = True,
+) -> "RayWarpParticleFilter":
+    """Build a Warp particle filter inside a Ray actor."""
+    _ray_log(debug, "loading Ray")
+    ray = _load_ray()
+
+    owns_ray = False
+    if not ray.is_initialized():
+        target = ray_address or "local runtime"
+        _ray_log(debug, f"initializing Ray connection ({target})")
+        context = ray.init(address=ray_address, ignore_reinit_error=True)
+        owns_ray = True
+        address = _ray_address(context, target)
+        _ray_log(debug, f"connected to Ray at {address}")
+    else:
+        _ray_log(debug, "using existing Ray runtime")
+
+    _ray_log(
+        debug,
+        f"creating Warp particle-filter actor (num_gpus={num_gpus}, device={device})",
+    )
+    actor_class = ray.remote(num_gpus=num_gpus)(_WarpParticleFilterActor)
+    actor = actor_class.remote(
+        num_particles=num_particles,
+        limits=limits,
+        object_props=object_props,
+        dt=dt,
+        ess_threshold=ess_threshold,
+        nconmax=nconmax,
+        njmax=njmax,
+        device=device,
+        debug=debug,
+    )
+    particle_filter = RayWarpParticleFilter(
+        ray,
+        actor,
+        debug=debug,
+        owns_ray=owns_ray,
+    )
+    _ray_log(debug, f"actor ready with {particle_filter.N} particles")
+    return particle_filter
+
+
+class RayWarpParticleFilter:
+    """Synchronous proxy for a Warp particle filter running in Ray."""
+
     def __init__(
-        self, 
-        num_particles: int, 
-        state_bounds: tuple[Bounds, Bounds],
-        motion_model: BaseMotionModel, 
-        measurement_model: BaseMeasurementModel,
-        ess_threshold_ratio: float = 0.5,
-        bound_enforcer=None,  
-        mean_estimator=None
-    ):
-        self.N = num_particles
-        self.motion_model = motion_model
-        self.measurement_model = measurement_model
-        self.ess_threshold_ratio = ess_threshold_ratio
-        
-        # MAGIC TRICK: Convert bounds to 1D arrays immediately.
-        # If you pass a float (0.5), it becomes np.array([0.5]). 
-        # If you pass an array, it stays an array.
-        self.min_bound = np.atleast_1d(state_bounds[0])
-        self.max_bound = np.atleast_1d(state_bounds[1])
-        self.dim = len(self.min_bound)
-        
-        # Inline type hinting keeps the top of the class clutter-free
-        self.particles: np.ndarray = np.random.uniform(self.min_bound, self.max_bound, size=(self.N, self.dim))
-        self.weights: np.ndarray = np.ones(self.N) / self.N
+        self,
+        ray: Any,
+        actor: Any,
+        debug: bool = False,
+        owns_ray: bool = False,
+    ) -> None:
+        self._ray = ray
+        self._actor = actor
+        self._debug = debug
+        self._owns_ray = owns_ray
+        self.N = 0
+        self.ess_threshold_ratio = 0.0
+        self.particles = np.empty((0, 0))
+        self.weights = np.empty(0)
+        self.history: dict[str, list[np.ndarray]] = {
+            "particles": [],
+            "estimates": [],
+            "weights": [],
+        }
+        snapshot = self._request_snapshot("startup")
+        self._sync(snapshot)
 
-        self.history = {'particles': [], 'estimates': [], 'weights': []}
+    def update_internal_state(self, state: dict[str, Any]) -> None:
+        _ray_log(self._debug, f"sending update_internal_state: {_summarize(state)}")
+        snapshot = self._ray.get(self._actor.update_internal_state.remote(state))
+        _ray_log(self._debug, f"received update_internal_state: {_summarize(snapshot)}")
+        self._sync(snapshot)
 
-        self.bound_enforcer = bound_enforcer
-        self.mean_estimator = mean_estimator
+    def step(
+        self,
+        control_input: dict[str, Any],
+        observation: dict[str, Any],
+        current_state: dict[str, Any],
+    ) -> None:
+        _ray_log(
+            self._debug,
+            "sending step: "
+            f"control={_summarize(control_input)}, "
+            f"observation={_summarize(observation)}, "
+            f"state={_summarize(current_state)}",
+        )
+        snapshot = self._ray.get(
+            self._actor.step.remote(control_input, observation, current_state)
+        )
+        _ray_log(self._debug, f"received step: {_summarize(snapshot)}")
+        self._sync(snapshot)
 
-    def reset(self, state: dict) -> None:
-        """Wipes the belief state and scatters particles uniformly."""
-        self.particles = np.random.uniform(self.min_bound, self.max_bound, size=(self.N, self.dim))
-        self.weights = np.ones(self.N) / self.N
-        self.motion_model.change_internal_state(self.particles, state)
+    def record_state(self) -> None:
+        _ray_log(self._debug, "sending record_state")
+        snapshot = self._ray.get(self._actor.record_state.remote())
+        _ray_log(self._debug, f"received record_state: {_summarize(snapshot)}")
+        self._sync(snapshot)
 
-    def update_internal_state(self, initial_state: dict) -> None:
-        self.motion_model.change_internal_state(self.particles, initial_state)
-
-    
     def estimate(self) -> np.ndarray:
-        """Calculates the weighted Expected Value."""
-        if self.mean_estimator:
-            return self.mean_estimator(self.particles, self.weights)
-        
-        # Default Generic Euclidean Logic
-        return np.average(self.particles, weights=self.weights, axis=0)
+        _ray_log(self._debug, "sending estimate request")
+        estimate = self._ray.get(self._actor.estimate.remote())
+        _ray_log(self._debug, f"received estimate: {_summarize(estimate)}")
+        return estimate
 
-    def predict(self, control_input) -> None:
-        self.particles = self.motion_model.propagate(self.particles, control_input)
-        
-    def update(self, observation: dict) -> None:
-        """
-        Updates particle weights based on the likelihood of the new observation, 
-        then normalizes the weights so they sum to 1.
-        
-        Args:
-            observation: The actual sensor reading from the real world or target system.
-        """
-        likelihoods = self.measurement_model.compute_likelihoods(self.particles, observation)
+    def reset(self, state: dict[str, Any]) -> None:
+        _ray_log(self._debug, f"sending reset: {_summarize(state)}")
+        snapshot = self._ray.get(self._actor.reset.remote(state))
+        _ray_log(self._debug, f"received reset: {_summarize(snapshot)}")
+        self._sync(snapshot)
 
-        new_weights = self.weights * likelihoods
-        # ==========================================
-        # TRUE BULLSEYE DETECTOR
-        # ==========================================
-        
-        if observation.get('contact', 0) == 1:
-            
-            # 1. Find the highest accumulated weight in the swarm
-            max_weight = new_weights.max()
-            
-            # 2. A True Perfect Particle must hit the bullseye THIS frame (likelihood == 1.0)
-            # AND it must not be a Zombie (its accumulated weight must equal the max_weight)
-            # (We multiply by 0.99 just to allow for microscopic floating-point rounding errors)
-            perfect_mask = (likelihoods >= 0.99) & (new_weights >= max_weight * 0.99) & (max_weight > 0)
-            
-            num_perfect = perfect_mask.sum()
-            
-            if num_perfect > 0:
-                print(f"🎯 BULLSEYE: Found {num_perfect} TRUE perfect particle(s) with no past penalties!")
-            else:
-                # If we have 0 perfect particles, it means the ones that hit were Zombies, 
-                # or the ones that survived the sweep missed the contact!
-                print(f"📉 No true perfect particles. Best surviving weight: {max_weight:.2e}")
-        
-        # Commit the new weights
-        self.weights = new_weights
-        
-        # Apply Bayes' Rule: Update our belief by multiplying the current 
-        # weights by the likelihood of the new observation.
-        self.weights *= likelihoods  
+    def close(self) -> None:
+        _ray_log(self._debug, "stopping Ray particle-filter actor")
+        self._ray.kill(self._actor)
+        if self._owns_ray:
+            _ray_log(self._debug, "shutting down Ray connection")
+            self._ray.shutdown()
 
-        if self.weights.sum() == 0.0:
-            print("⚠️ CRITICAL WARNING: Particle Extinction Event! All weights collapsed to 0.0. Forcing a uniform reset.")
-        
-        # Add a microscopic constant to all weights. If the sensor reading is 
-        # extreme and assigns 0.0 likelihood to all particles, this prevents a 
-        # fatal ZeroDivisionError during the normalization step below.
-        #self.weights += 1.e-300 
+    def _sync(self, snapshot: dict[str, Any]) -> None:
+        self.N = snapshot["N"]
+        self.ess_threshold_ratio = snapshot["ess_threshold_ratio"]
+        self.particles = snapshot["particles"]
+        self.weights = snapshot["weights"]
+        self.history = snapshot["history"]
 
-        # Normalize the weights so they represent a valid probability distribution (summing to 1)
-        sum_weights = self.weights.sum()
-        self.weights /= sum_weights 
+    def _request_snapshot(self, label: str) -> dict[str, Any]:
+        _ray_log(self._debug, f"sending {label} snapshot request")
+        snapshot = self._ray.get(self._actor.snapshot.remote())
+        _ray_log(self._debug, f"received {label} snapshot: {_summarize(snapshot)}")
+        return snapshot
 
-    def resample(self, current_state):
-        """
-        We use Gaussian Kernel instead of Epanechnikov for efficiency purposes. 
-        The Gaussian is almost as good and much faster.
-        """
-        # Compute the Effective Sample Size (ESS)
-        Neff = 1. / np.sum(self.weights**2)
 
-        # Only resample if ESS drops below threshold
-        if Neff < self.N * self.ess_threshold_ratio:
+class _WarpParticleFilterActor:
+    def __init__(self, *args: Any, debug: bool = False, **kwargs: Any) -> None:
+        self._debug = debug
+        if debug:
+            _ray_worker_log(debug, "building Warp particle filter")
+        self.particle_filter = build_warp_particle_filter(*args, **kwargs)
+        if debug:
+            _ray_worker_log(debug, "Warp particle filter ready")
 
-            # 1. Compute covariance matrix S_k
-            nx = self.particles.shape[1]
-            S_k = np.cov(self.particles.T, aweights=self.weights, bias=True)
+    def update_internal_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        _ray_worker_log(
+            self._debug,
+            f"received update_internal_state: {_summarize(state)}",
+        )
+        self.particle_filter.update_internal_state(state)
+        _ray_worker_log(self._debug, "sending update_internal_state snapshot")
+        return self._snapshot()
 
-            # Automatically upgrade a 0D scalar to a 1x1 2D matrix
-            # (If it is already a 2x2 matrix, this safely does nothing)
-            S_k = np.atleast_2d(S_k)
+    def step(
+        self,
+        control_input: dict[str, Any],
+        observation: dict[str, Any],
+        current_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        _ray_worker_log(
+            self._debug,
+            "received step: "
+            f"control={_summarize(control_input)}, "
+            f"observation={_summarize(observation)}, "
+            f"state={_summarize(current_state)}",
+        )
+        self.particle_filter.step(control_input, observation, current_state)
+        _ray_worker_log(self._debug, "sending step snapshot")
+        return self._snapshot()
 
-            # (Adding a tiny epsilon to the diagonal prevents LinAlgError if 
-            # particles have already collapsed to a single point)
-            S_k += np.eye(nx) * 1e-8 
+    def record_state(self) -> dict[str, Any]:
+        _ray_worker_log(self._debug, "received record_state")
+        self.particle_filter.record_state()
+        _ray_worker_log(self._debug, "sending record_state snapshot")
+        return self._snapshot()
 
-            # 2. Compute D_k such that D_k * D_k.T = S_k
-            D = np.linalg.cholesky(S_k)
+    def estimate(self) -> np.ndarray:
+        _ray_worker_log(self._debug, "received estimate request")
+        estimate = self.particle_filter.estimate()
+        _ray_worker_log(self._debug, f"sending estimate: {_summarize(estimate)}")
+        return estimate
 
-            # 3. Perform Systematic Resampling
-            # Systematic Resampling: Instead of spinning a roulette wheel N times,
-            # we spin a wheel with N equally spaced pointers exactly once (offset 'u').
-            # This is significantly faster and mathematically more stable.
-            u = np.random.rand() 
-            positions = (np.arange(self.N) + u) / self.N
+    def reset(self, state: dict[str, Any]) -> dict[str, Any]:
+        _ray_worker_log(self._debug, f"received reset: {_summarize(state)}")
+        self.particle_filter.reset(state)
+        _ray_worker_log(self._debug, "sending reset snapshot")
+        return self._snapshot()
 
-            cumulative_sum = np.cumsum(self.weights)
-            
-            # Guard against floating-point rounding errors that could cause index out-of-bounds
-            cumulative_sum[-1] = 1.0  
+    def snapshot(self) -> dict[str, Any]:
+        _ray_worker_log(self._debug, "received snapshot request")
+        return self._snapshot()
 
-            indexes = np.searchsorted(cumulative_sum, positions, side='right')
-            resampled_particles = self.particles[indexes]
-            
-            # Reset weights back to uniform for the surviving clones
-            self.weights.fill(1.0 / self.N)
+    def _snapshot(self) -> dict[str, Any]:
+        return {
+            "N": self.particle_filter.N,
+            "ess_threshold_ratio": self.particle_filter.ess_threshold_ratio,
+            "particles": self.particle_filter.particles,
+            "weights": self.particle_filter.weights,
+            "history": self.particle_filter.history,
+        }
 
-            # 4. Calculate the Optimal Bandwidth (h_opt)
-            # Using Silverman's rule of thumb for a Gaussian Kernel
-            A = (4.0 / (nx + 2.0)) ** (1.0 / (nx + 4.0))
-            h_opt = A * (self.N ** (-1.0 / (nx + 4.0)))
 
-            # 5. Generate the Raw Jitter (epsilon)
-            # Draw N random vectors from a standard normal distribution
-            epsilon = np.random.randn(self.N, nx)
+def _load_ray() -> Any:
+    try:
+        import ray
+    except ImportError as exc:
+        raise RuntimeError(
+            "Ray is not installed. Install ray or set USE_RAY = False."
+        ) from exc
+    return ray
 
-            # 6. Apply the Jitter
-            # We transpose epsilon so we can dot-product it with D, 
-            # then transpose it back to match the particle array shape.
-            # Formula: x* = x + h * D * epsilon
-            jitter = h_opt * (D @ epsilon.T).T
-            self.particles = resampled_particles + jitter * 1
 
-            # 7. Reset the weights
-            # Because we just resampled, all particles now represent equal probability mass
-            self.weights = np.ones(self.N) / self.N
+def _ray_log(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"[Ray ⚡️] {message}", flush=True)
 
-            # 8. Clip particles to state bounds
-            if self.bound_enforcer:
-                self.particles = self.bound_enforcer(self.particles)
-            else:
-                # Default Generic Euclidean Logic
-                self.particles = np.clip(self.particles, self.min_bound, self.max_bound)
 
-            # 8. Update particles in the motion model
-            self.motion_model.change_internal_state(self.particles, current_state)
+def _ray_worker_log(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"[Ray worker ⚡️] {message}", flush=True)
 
-    def step(self, control_input, observation, current_state):
-        self.predict(control_input)
-        self.update(observation)
-        self.resample(current_state)
 
-    def record_state(self):
-        self.history['particles'].append(self.particles.copy())
-        self.history['estimates'].append(self.estimate())
-        self.history['weights'].append(self.weights.copy())
+def _summarize(value: Any) -> str:
+    if isinstance(value, np.ndarray):
+        return f"ndarray(shape={value.shape}, dtype={value.dtype})"
+    if isinstance(value, dict):
+        parts = []
+        for key, item in value.items():
+            parts.append(f"{key}={_summarize(item)}")
+        return "{" + ", ".join(parts) + "}"
+    if isinstance(value, (list, tuple)):
+        return f"{type(value).__name__}(len={len(value)})"
+    return repr(value)
 
+
+def _ray_address(context: Any, fallback: str) -> str:
+    address_info = getattr(context, "address_info", None)
+    if not address_info:
+        return fallback
+    return (
+        address_info.get("address")
+        or address_info.get("gcs_address")
+        or address_info.get("redis_address")
+        or fallback
+    )
