@@ -19,6 +19,7 @@
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <camera name="frontal" pos="3.0 0.0 0.25" xyaxes="0 1 0 0 0 1"/>
     
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" 
           condim="3" friction="1 0.005 0.0001" 

@@ -1,8 +1,219 @@
 import os
 
 import matplotlib.pyplot as plt
+os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.setdefault("MUJOCO_GL", "egl")
 import mujoco
 import numpy as np
+
+
+class ViewerGifRecorder:
+    def __init__(
+        self,
+        save_path,
+        capture_interval=200,
+        fps=10,
+        width=640,
+        height=480,
+        enabled=True,
+        particle_filter=None,
+        camera_name=None,
+    ):
+        self.save_path = save_path
+        self.capture_interval = capture_interval
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self.enabled = enabled
+        self.particle_filter = particle_filter
+        self.camera_name = camera_name
+        self.frames = []
+        self.step_count = 0
+        self._renderer = None
+
+    def capture(self, robot):
+        if not self.enabled:
+            return
+
+        self.step_count += 1
+        if self.step_count % self.capture_interval != 0:
+            return
+
+        frame, self._renderer = capture_viewer_frame(
+            robot,
+            renderer=self._renderer,
+            width=self.width,
+            height=self.height,
+            particle_filter=self.particle_filter,
+            camera_name=self.camera_name,
+        )
+        if frame is not None:
+            self.frames.append(frame)
+
+    def save(self):
+        save_viewer_gif(self.frames, self.save_path, fps=self.fps)
+
+    def close(self):
+        if self._renderer is not None:
+            if hasattr(self._renderer, "close"):
+                self._renderer.close()
+            self._renderer = None
+
+
+def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_filter=None, camera_name=None):
+    """
+    Captures the robot's current MuJoCo scene as an RGB frame.
+
+    If a passive viewer is attached, its camera and scene options are reused.
+    For MJWarp robots, host data is synchronized before rendering.
+    """
+    if getattr(robot, "model", None) is None or getattr(robot, "data", None) is None:
+        return None, renderer
+
+    if hasattr(robot, "sync_host"):
+        robot.sync_host()
+
+    if renderer is None:
+        renderer = _create_renderer(robot.model, width=width, height=height)
+
+    viewer = getattr(robot, "viewer", None)
+    camera = getattr(viewer, "cam", None)
+    scene_option = getattr(viewer, "opt", None)
+
+    try:
+        if camera_name is not None:
+            renderer.update_scene(robot.data, camera=camera_name)
+        else:
+            renderer.update_scene(robot.data, camera=camera, scene_option=scene_option)
+    except (TypeError, ValueError):
+        if camera_name is not None:
+            renderer.update_scene(robot.data, camera=camera_name)
+        elif camera is not None:
+            renderer.update_scene(robot.data, camera=camera)
+        else:
+            renderer.update_scene(robot.data)
+
+    if particle_filter is not None:
+        draw_particle_geoms(
+            renderer.scene,
+            particle_filter.particles,
+            particle_filter.weights,
+            fixed_z=0.04,
+            fixed_x=0.55,
+            clear=True,
+        )
+
+    return renderer.render().copy(), renderer
+
+
+def draw_particle_geoms(scene, particles, weights, fixed_z=0.04, fixed_x=0.55, clear=False):
+    """
+    Append particle markers as user geoms to an MjvScene (without resetting existing geoms).
+    """
+    if scene is None or len(particles) == 0:
+        return
+
+    num_p = len(particles)
+    dim = particles.shape[1] if len(particles.shape) > 1 else 1
+
+    max_w = np.max(weights) if np.max(weights) > 1e-10 else 1e-10
+    norm_w = np.clip(weights / max_w, 0.0, 1.0)
+
+    rgba = np.zeros((num_p, 4))
+    rgba[:, 3] = 1.0
+    mask = norm_w < 0.5
+    rgba[mask, 1] = norm_w[mask] * 2.0
+    rgba[mask, 2] = 1.0 - (norm_w[mask] * 2.0)
+    rgba[~mask, 0] = (norm_w[~mask] - 0.5) * 2.0
+    rgba[~mask, 1] = 1.0 - ((norm_w[~mask] - 0.5) * 2.0)
+
+    pos_3d = np.zeros((num_p, 3))
+    if dim == 1:
+        pos_3d[:, 0] = fixed_x
+        pos_3d[:, 1] = particles[:, 0]
+    else:
+        pos_3d[:, 0] = particles[:, 0]
+        pos_3d[:, 1] = particles[:, 1]
+    pos_3d[:, 2] = fixed_z
+
+    mat_3d = np.zeros((num_p, 9))
+    if dim == 3:
+        thetas = particles[:, 2]
+        cos_t = np.cos(thetas)
+        sin_t = np.sin(thetas)
+        mat_3d[:, 0] = cos_t
+        mat_3d[:, 1] = -sin_t
+        mat_3d[:, 3] = sin_t
+        mat_3d[:, 4] = cos_t
+        mat_3d[:, 8] = 1.0
+        geom_type = mujoco.mjtGeom.mjGEOM_BOX            # type: ignore
+        geom_size = np.array([0.015, 0.002, 0.002])
+    else:
+        mat_3d[:, 0] = 1.0
+        mat_3d[:, 4] = 1.0
+        mat_3d[:, 8] = 1.0
+        geom_type = mujoco.mjtGeom.mjGEOM_SPHERE         # type: ignore
+        geom_size = np.array([0.005, 0.0, 0.0])
+
+    if clear:
+        scene.ngeom = 0
+
+    for i in range(num_p):
+        if scene.ngeom >= scene.maxgeom:
+            break
+        mujoco.mjv_initGeom(                              # type: ignore
+            scene.geoms[scene.ngeom],
+            type=geom_type,
+            size=geom_size,
+            pos=pos_3d[i],
+            mat=mat_3d[i],
+            rgba=rgba[i],
+        )
+        scene.ngeom += 1
+
+
+def _create_renderer(model, width=640, height=480):
+    """
+    Create a MuJoCo renderer that works in both interactive and headless runs.
+
+    In headless mode MuJoCo still needs an OpenGL context before Renderer is
+    constructed, so we create a small offscreen context and keep it alive on the
+    renderer object.
+    """
+    if model.vis.global_.offwidth < width:
+        model.vis.global_.offwidth = width
+    if model.vis.global_.offheight < height:
+        model.vis.global_.offheight = height
+    return mujoco.Renderer(model, height=height, width=width)
+
+
+def save_viewer_gif(frames, save_path, fps=10):
+    """
+    Saves captured RGB frames to a GIF.
+    """
+    if not frames:
+        print(f"[GIF] No viewer frames captured; skipping {save_path}")
+        return
+
+    output_dir = os.path.dirname(save_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise ImportError("Saving viewer GIFs requires Pillow (`pip install pillow`).") from error
+
+    duration_ms = int(1000 / fps)
+    images = [Image.fromarray(frame) for frame in frames]
+    images[0].save(
+        save_path,
+        save_all=True,
+        append_images=images[1:],
+        duration=duration_ms,
+        loop=0,
+    )
+    print(f"[GIF] Saved {len(frames)} viewer frames to: {save_path}")
 
 
 def visualize_particles(viewer, particles, weights, fixed_z=0.04, fixed_x=0.55):
@@ -13,85 +224,7 @@ def visualize_particles(viewer, particles, weights, fixed_z=0.04, fixed_x=0.55):
     if viewer is None or len(particles) == 0:
         return
 
-    viewer.user_scn.ngeom = 0 
-    num_p = len(particles)
-    dim = particles.shape[1] if len(particles.shape) > 1 else 1
-    
-    # ==========================================
-    # 1. VECTORIZED COLOR MATH
-    # ==========================================
-    max_w = np.max(weights) if np.max(weights) > 1e-10 else 1e-10
-    norm_w = np.clip(weights / max_w, 0.0, 1.0)
-    
-    rgba = np.zeros((num_p, 4))
-    rgba[:, 3] = 1.0 
-    
-    mask = norm_w < 0.5
-    rgba[mask, 1] = norm_w[mask] * 2.0         
-    rgba[mask, 2] = 1.0 - (norm_w[mask] * 2.0) 
-    rgba[~mask, 0] = (norm_w[~mask] - 0.5) * 2.0     
-    rgba[~mask, 1] = 1.0 - ((norm_w[~mask] - 0.5) * 2.0) 
-
-    # ==========================================
-    # 2. VECTORIZED POSITION MATH
-    # ==========================================
-    pos_3d = np.zeros((num_p, 3))
-    
-    if dim == 1:
-        pos_3d[:, 0] = fixed_x
-        pos_3d[:, 1] = particles[:, 0]
-    else:
-        pos_3d[:, 0] = particles[:, 0]
-        pos_3d[:, 1] = particles[:, 1]
-        
-    pos_3d[:, 2] = fixed_z 
-
-    # ==========================================
-    # 3. VECTORIZED ROTATION MATH (The 3DOF Upgrade)
-    # ==========================================
-    # MuJoCo expects a flat 9-element rotation matrix [R11, R12, R13, R21...]
-    mat_3d = np.zeros((num_p, 9))
-    
-    if dim == 3:
-        # Calculate Sin and Cos for all particles at once
-        thetas = particles[:, 2]
-        cos_t = np.cos(thetas)
-        sin_t = np.sin(thetas)
-        
-        # Fill the Z-axis rotation matrix
-        mat_3d[:, 0] = cos_t   # R11
-        mat_3d[:, 1] = -sin_t  # R12
-        mat_3d[:, 3] = sin_t   # R21
-        mat_3d[:, 4] = cos_t   # R22
-        mat_3d[:, 8] = 1.0     # R33 (Z-axis scale)
-        
-        geom_type = mujoco.mjtGeom.mjGEOM_BOX           # type: ignore
-        geom_size = np.array([0.015, 0.002, 0.002])     # Thin directional needle
-    else:
-        # 1D/2D: Just use standard Identity Matrix
-        mat_3d[:, 0] = 1.0
-        mat_3d[:, 4] = 1.0
-        mat_3d[:, 8] = 1.0
-        
-        geom_type = mujoco.mjtGeom.mjGEOM_SPHERE        # type: ignore
-        geom_size = np.array([0.005, 0.0, 0.0])         # Standard sphere
-
-    # ==========================================
-    # 4. FAST RENDERING LOOP
-    # ==========================================
-    for i in range(num_p):
-        if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom:
-            break
-            
-        mujoco.mjv_initGeom(                            # type: ignore
-            viewer.user_scn.geoms[viewer.user_scn.ngeom],
-            type=geom_type,
-            size=geom_size,
-            pos=pos_3d[i],
-            mat=mat_3d[i], 
-            rgba=rgba[i] 
-        )
-        viewer.user_scn.ngeom += 1
+    draw_particle_geoms(viewer.user_scn, particles, weights, fixed_z=fixed_z, fixed_x=fixed_x, clear=True)
 
 
 def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None, true_pos=None, min_val=None, max_val=None, save_path=None):

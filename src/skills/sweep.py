@@ -10,7 +10,17 @@ from src.utils import execute_trajectory
 from src.utils import visualize_particles
 
 
-def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat, sweep_vel, safety_distance, visualize=False):
+def sweep_until_contact(
+    robot,
+    particle_filter,
+    start_pos,
+    end_pos,
+    target_quat,
+    sweep_vel,
+    safety_distance,
+    visualize=False,
+    gif_recorder=None,
+):
     """
     Executes a complete robotic sweep skill: Hover -> Prep -> Start -> Sweep.
     """
@@ -61,8 +71,7 @@ def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat,
         }
         
         particle_filter.step(ctrl, observation, current_state)
-        particle_filter.record_state()  # Save the current state for visualization later
-            
+        particle_filter.record_state()  # Save the current state for visualization later    
 
         # ==========================================
         # 3. RENDER & PACE (The Magic Synchronization)
@@ -70,6 +79,9 @@ def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat,
         # If the user wants to see it AND the robot actually has a screen, draw the dots!
         if visualize and hasattr(robot, 'viewer') and step % 20 == 0: # Only update the dots at 50 Hz to avoid performance issues
             visualize_particles(robot.viewer, particle_filter.particles, particle_filter.weights)
+
+        if gif_recorder is not None:
+            gif_recorder.capture(robot)
 
         # Let the robot pace itself!
         # -> Sim Robot: Skips rendering if it's going too fast (>60 FPS) to save CPU.

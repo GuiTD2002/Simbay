@@ -1,18 +1,7 @@
 <mujoco model="props2">
-  <asset>
-    <mesh name="task_board" file="/home/lasigerobot24/Desktop/Simbay/models/task_board_perfect.stl"/>
-  </asset>
-
   <worldbody>
     <body name="object" pos="0.55 0.05 0.05">
       <freejoint/>
-      
-      <geom type="mesh" 
-            mesh="task_board"
-            rgba="0.7 0.7 0.7 1.0" 
-            contype="0" 
-            conaffinity="0" 
-            />
 
       <geom type="box" size="0.125 0.075 0.04" pos="0 -0.007 -0.03" rgba="0 1 0 0.4" mass="1.0"/>
       

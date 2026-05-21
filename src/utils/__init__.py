@@ -11,6 +11,7 @@ from .mujoco_utils import initialize_mujoco_env
 from .mujoco_utils import load_mujoco_model
 from .mujoco_utils import modify_object_properties
 from .sensors import detect_contact
+from .visuals import ViewerGifRecorder
 from .visuals import visualize_particles
 
 from.visuals import plot_particle_evolution
@@ -27,6 +28,7 @@ __all__ = [
     "load_mujoco_model",
     "modify_object_properties",
     "detect_contact",
+    "ViewerGifRecorder",
     "visualize_particles",
     "execute_trajectory",
     "plot_particle_evolution"
