@@ -324,16 +324,21 @@ def plot_particle_evolution(
     # ==========================================
     # 5. MATPLOTLIB RENDERING
     # ==========================================
-    fig, (ax_main, ax_ess) = plt.subplots(
+    fig = plt.figure(figsize=(12, 9), layout="constrained")
+    gs = fig.add_gridspec(
         2,
-        1,
-        figsize=(12, 9),
-        sharex=True,
-        gridspec_kw={"height_ratios": [4, 1]},
+        2,
+        height_ratios=[4, 1],
+        width_ratios=[40, 1],
     )
+    ax_main = fig.add_subplot(gs[0, 0])
+    ax_ess = fig.add_subplot(gs[1, 0], sharex=ax_main)
+    cbar_ax = fig.add_subplot(gs[0, 1])
+    fig.add_subplot(gs[1, 1]).axis("off")
+
     sc = ax_main.scatter(x_vals, p_vals, c=c_vals, cmap='viridis',
                          alpha=0.6, s=15, edgecolors='none')
-    cbar = fig.colorbar(sc, ax=ax_main)
+    cbar = fig.colorbar(sc, cax=cbar_ax)
     cbar.set_label('Particle Weight (Probability)', fontsize=12, fontweight='bold')
 
     ax_main.plot(range(num_steps), e_vals, color='red', linewidth=3, label='Filter Estimate (Mean)')
@@ -357,7 +362,6 @@ def plot_particle_evolution(
     ax_ess.legend(loc='upper right')
     ax_main.grid(True, linestyle=':', alpha=0.7)
     ax_ess.grid(True, linestyle=':', alpha=0.7)
-    plt.tight_layout()
     
     if save_path:
         import os

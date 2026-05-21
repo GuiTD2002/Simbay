@@ -9,10 +9,6 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src.estimation import BinaryContactMeasurementModel
-from src.estimation import ParticleFilterRegularized
-from src.estimation import PositionMotionModel
-from src.estimation import RobotContainer
 from src.robots import RealRobot
 from src.robots.warp_mujoco_robot import initialize_mujoco_warp_env
 from src.skills import move_to_home
@@ -20,99 +16,17 @@ from src.skills.sweep import sweep_until_contact
 from src.utils import DEFAULT_OBJECT_PROPS
 from src.utils import ViewerGifRecorder
 from src.utils import plot_particle_evolution
-
-"""
-Example call-site
-=================
-
-How to switch your particle filter to the batched Warp backend.
-
-The filter itself (``ParticleFilterRegularized``) is **unchanged**. Only
-the container and the motion + measurement models are swapped.
-"""
-
-from src.estimation.particle_filter import ParticleFilterRegularized
-from src.warp_estimation.warp_container import WarpRobotContainer
-from src.warp_estimation.warp_motion import WarpPositionMotionModel
-from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
-
-
-def build_warp_particle_filter(
-    num_particles: int,
-    limits,
-    object_props: dict,
-    dt: float,
-    ess_threshold: float,
-    *,
-    nconmax: int | None = None,
-    njmax: int | None = None,
-    device: str | None = "cuda:0",
-):
-    """Construct a Warp-batched particle filter.
-
-    Notes on the new parameters
-    ---------------------------
-    ``nconmax`` / ``njmax``
-        Warp pre-allocates contact and constraint buffers. If you see
-        overflow messages from MJWarp during stepping, raise these.
-        Sensible starting points: ``nconmax = num_particles * 8``,
-        ``njmax = 200``. Tune from there.
-
-    ``device``
-        Pass ``"cuda:0"`` for a single-GPU setup. With Ray + 1 GPU there's
-        nothing to gain from sharding the filter across devices — keep
-        ``device`` fixed and let Ray schedule the actor onto that GPU.
-    """
-    container = WarpRobotContainer( 
-        num_particles=num_particles,
-        props=object_props,
-        dt=dt,
-        nconmax=nconmax,
-        njmax=njmax,
-        device=device,
-    )
-
-    return ParticleFilterRegularized(
-        num_particles=num_particles,
-        state_bounds=limits,
-        motion_model=WarpPositionMotionModel(container),
-        measurement_model=WarpBinaryContactMeasurementModel(container),
-        ess_threshold_ratio=ess_threshold,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Optional: Ray actor wrapper
-# ---------------------------------------------------------------------------
-#
-# With one GPU, Ray's value here is mainly process isolation — keeping the
-# Warp kernels off the main process's CUDA context so a viewer thread or
-# other GPU consumer doesn't fight for the runtime.
-#
-# Uncomment if you want this.
-#
-# import ray
-#
-# @ray.remote(num_gpus=1)
-# class WarpParticleFilterActor:
-#     def __init__(self, *args, **kwargs):
-#         self.pf = build_warp_particle_filter(*args, **kwargs)
-#
-#     def step(self, control_input, observation, current_state):
-#         self.pf.step(control_input, observation, current_state)
-#         return self.pf.estimate()
-#
-#     def reset(self, state):
-#         self.pf.reset(state)
+from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
+from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 
 # ==========================================
 # VIEWER / GIF QUALITY
 # ==========================================
 GIF_PATH = "saved_plots/gpu_pos_estimation_2D.gif"
-GIF_WIDTH = 1280
-GIF_HEIGHT = 960
+GIF_WIDTH = 720
+GIF_HEIGHT = 720
 GIF_FPS = 10
-GIF_INTERVAL = 10
+GIF_INTERVAL = 100
 VIEWER_CAMERA_NAME = "frontal"
 VIEWER_CAMERA_X = 3
 
@@ -121,8 +35,11 @@ VIEWER_CAMERA_X = 3
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = True
+USE_RAY = False
+RAY_ADDRESS = None
+RAY_NUM_GPUS = 1.0
 
-NUM_PARTICLES = 100
+NUM_PARTICLES = 400
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -157,6 +74,29 @@ def use_fixed_viewer_camera(viewer, camera_id):
     viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED  # type: ignore
     viewer.cam.fixedcamid = int(camera_id)
 
+
+def create_particle_filter(limits, dt):
+    kwargs = {
+        "num_particles": NUM_PARTICLES,
+        "limits": limits,
+        "object_props": DEFAULT_OBJECT_PROPS,
+        "dt": dt,
+        "ess_threshold": ESS_THRESHOLD,
+        "nconmax": NUM_PARTICLES * 8,
+        "njmax": 300,
+        "device": "cuda:0",
+    }
+
+    if USE_RAY:
+        return build_ray_warp_particle_filter(
+            **kwargs,
+            num_gpus=RAY_NUM_GPUS,
+            ray_address=RAY_ADDRESS,
+        )
+
+    return build_warp_particle_filter(**kwargs)
+
+
 def main():
     print("Initializing Environment...")
     if USE_REAL_ROBOT:
@@ -173,25 +113,7 @@ def main():
     if not USE_REAL_ROBOT: print(f"🛑 [Debug] Initial Ground Truth: X={true_x:.3f}, Y={true_y:.3f}")
 
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
-    container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)
-
-    # particle_filter = ParticleFilterRegularized(
-    #     num_particles=NUM_PARTICLES, state_bounds=limits,
-    #     motion_model=PositionMotionModel(container),
-    #     measurement_model=BinaryContactMeasurementModel(container),
-    #     ess_threshold_ratio=ESS_THRESHOLD
-    # )
-
-    particle_filter = build_warp_particle_filter(
-        num_particles=NUM_PARTICLES,
-        limits=limits,
-        object_props=DEFAULT_OBJECT_PROPS,
-        dt=robot.dt,
-        ess_threshold=ESS_THRESHOLD,
-        nconmax=NUM_PARTICLES * 8,
-        njmax=300,
-        device="cuda:0", # not simbay specific - this is what tells the MujucoWarp it to use the GPU
-    )
+    particle_filter = create_particle_filter(limits, robot.dt)
 
     gif_recorder = ViewerGifRecorder(
         save_path=GIF_PATH,
@@ -312,6 +234,9 @@ def main():
     plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
                             min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
+
+    if hasattr(particle_filter, "close"):
+        particle_filter.close()
 
 if __name__ == "__main__":
     main()
