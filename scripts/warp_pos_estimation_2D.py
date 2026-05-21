@@ -111,10 +111,10 @@ def build_warp_particle_filter(
 GIF_PATH = "saved_plots/gpu_pos_estimation_2D.gif"
 GIF_WIDTH = 1280
 GIF_HEIGHT = 960
-GIF_FPS = 12
-GIF_INTERVAL = 100
+GIF_FPS = 10
+GIF_INTERVAL = 10
 VIEWER_CAMERA_NAME = "frontal"
-VIEWER_CAMERA_X = 2.0
+VIEWER_CAMERA_X = 3
 
 # ==========================================
 # CONFIGURATION
@@ -165,10 +165,8 @@ def main():
     else:
         robot = initialize_mujoco_warp_env(dt=0.001, device="cuda")
         robot.sync_host()
-        camera_id = configure_named_camera_x(robot, VIEWER_CAMERA_NAME, VIEWER_CAMERA_X)
         if not HEADLESS and os.environ.get("DISPLAY"):
             viewer = mujoco.viewer.launch_passive(robot.model, robot.data)
-            use_fixed_viewer_camera(viewer, camera_id)
             robot.viewer = viewer
 
     true_x, true_y = track_ground_truth(robot)
@@ -191,7 +189,7 @@ def main():
         dt=robot.dt,
         ess_threshold=ESS_THRESHOLD,
         nconmax=NUM_PARTICLES * 8,
-        njmax=200,
+        njmax=300,
         device="cuda:0", # not simbay specific - this is what tells the MujucoWarp it to use the GPU
     )
 
@@ -203,6 +201,7 @@ def main():
         height=GIF_HEIGHT,
         particle_filter=particle_filter,
         camera_name=VIEWER_CAMERA_NAME,
+        camera_x=VIEWER_CAMERA_X,
     )
 
     mid_x = (MIN_X + MAX_X) / 2.0
@@ -306,12 +305,12 @@ def main():
 
     # Plot Y
     plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
-                            min_val=-0.2, max_val=0.2,
+                            min_val=MIN_Y, max_val=MAX_Y,
                             save_path=f"{output_folder}/y_axis_evolution.png")
 
     # Plot X
     plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
-                            min_val=0.3, max_val=0.6,
+                            min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
 
 if __name__ == "__main__":

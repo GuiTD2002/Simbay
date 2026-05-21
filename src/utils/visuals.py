@@ -18,6 +18,7 @@ class ViewerGifRecorder:
         enabled=True,
         particle_filter=None,
         camera_name=None,
+        camera_x=None,
     ):
         self.save_path = save_path
         self.capture_interval = capture_interval
@@ -27,6 +28,7 @@ class ViewerGifRecorder:
         self.enabled = enabled
         self.particle_filter = particle_filter
         self.camera_name = camera_name
+        self.camera_x = camera_x
         self.frames = []
         self.step_count = 0
         self._renderer = None
@@ -60,7 +62,7 @@ class ViewerGifRecorder:
             self._renderer = None
 
 
-def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_filter=None, camera_name=None):
+def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_filter=None, camera_name=None, camera_x=None):
     """
     Captures the robot's current MuJoCo scene as an RGB frame.
 
@@ -82,6 +84,10 @@ def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_f
 
     try:
         if camera_name is not None:
+            if camera_x is not None:
+                camera_id = mujoco.mj_name2id(robot.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name)
+                if camera_id >= 0:
+                    robot.model.cam_pos[camera_id, 0] = float(camera_x)
             renderer.update_scene(robot.data, camera=camera_name)
         else:
             renderer.update_scene(robot.data, camera=camera, scene_option=scene_option)
@@ -100,7 +106,7 @@ def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_f
             particle_filter.weights,
             fixed_z=0.04,
             fixed_x=0.55,
-            clear=True,
+            clear=False,
         )
 
     return renderer.render().copy(), renderer
@@ -108,7 +114,7 @@ def capture_viewer_frame(robot, renderer=None, width=640, height=480, particle_f
 
 def draw_particle_geoms(scene, particles, weights, fixed_z=0.04, fixed_x=0.55, clear=False):
     """
-    Append particle markers as user geoms to an MjvScene (without resetting existing geoms).
+    Draw particle markers into an MjvScene.
     """
     if scene is None or len(particles) == 0:
         return
@@ -148,6 +154,7 @@ def draw_particle_geoms(scene, particles, weights, fixed_z=0.04, fixed_x=0.55, c
         mat_3d[:, 8] = 1.0
         geom_type = mujoco.mjtGeom.mjGEOM_BOX            # type: ignore
         geom_size = np.array([0.015, 0.002, 0.002])
+        # rgba[:, 3] = 0.2
     else:
         mat_3d[:, 0] = 1.0
         mat_3d[:, 4] = 1.0
@@ -227,7 +234,16 @@ def visualize_particles(viewer, particles, weights, fixed_z=0.04, fixed_x=0.55):
     draw_particle_geoms(viewer.user_scn, particles, weights, fixed_z=fixed_z, fixed_x=fixed_x, clear=True)
 
 
-def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None, true_pos=None, min_val=None, max_val=None, save_path=None):
+def plot_particle_evolution(
+    particle_filter,
+    dimension=0,
+    ylabel=None,
+    axis=None,
+    true_pos=None,
+    min_val=None,
+    max_val=None,
+    save_path=None,
+):
     """
     Universal plotter for 1D, 2D, or 3DOF particle filters.
     """
@@ -241,6 +257,9 @@ def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None
         return
 
     num_steps = len(particles_np)
+    ess_vals = np.asarray(particle_filter.history.get('ess', []), dtype=float)
+    if ess_vals.size == 0:
+        ess_vals = 1.0 / np.sum(weights_np**2, axis=1)
     
     # ==========================================
     # 2. AXIS CONFIGURATION
@@ -305,26 +324,39 @@ def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None
     # ==========================================
     # 5. MATPLOTLIB RENDERING
     # ==========================================
-    plt.figure(figsize=(12, 7))
-    sc = plt.scatter(x_vals, p_vals, c=c_vals, cmap='viridis', 
-                     alpha=0.6, s=15, edgecolors='none')
-    cbar = plt.colorbar(sc)
+    fig, (ax_main, ax_ess) = plt.subplots(
+        2,
+        1,
+        figsize=(12, 9),
+        sharex=True,
+        gridspec_kw={"height_ratios": [4, 1]},
+    )
+    sc = ax_main.scatter(x_vals, p_vals, c=c_vals, cmap='viridis',
+                         alpha=0.6, s=15, edgecolors='none')
+    cbar = fig.colorbar(sc, ax=ax_main)
     cbar.set_label('Particle Weight (Probability)', fontsize=12, fontweight='bold')
 
-    plt.plot(range(num_steps), e_vals, color='red', linewidth=3, label='Filter Estimate (Mean)')
+    ax_main.plot(range(num_steps), e_vals, color='red', linewidth=3, label='Filter Estimate (Mean)')
     
     if true_pos is not None:
-        plt.axhline(y=true_pos, color='red', linestyle='--', linewidth=2, label=f'True value ({true_pos:.3f})')
+        ax_main.axhline(y=true_pos, color='red', linestyle='--', linewidth=2, label=f'True value ({true_pos:.3f})')
 
-    plt.title(f'Particle Filter: {title_name} Evolution', fontsize=14, fontweight='bold')
-    plt.xlabel('Simulation Step', fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
+    ax_main.set_title(f'Particle Filter: {title_name} Evolution ({num_particles} particles)', fontsize=14, fontweight='bold')
+    ax_main.set_ylabel(ylabel, fontsize=12)
     
     if min_val is not None and max_val is not None:
-        plt.ylim(min_val, max_val) 
+        ax_main.set_ylim(min_val, max_val)
         
-    plt.legend(loc='upper right')
-    plt.grid(True, linestyle=':', alpha=0.7)
+    ess_threshold = particle_filter.N * particle_filter.ess_threshold_ratio
+    ax_ess.plot(range(len(ess_vals)), ess_vals, color="teal", linewidth=2, label="ESS")
+    ax_ess.axhline(y=ess_threshold, color="gray", linestyle="--", linewidth=1.5, label="Resampling Threshold")
+    ax_ess.set_ylabel("ESS", fontsize=12)
+    ax_ess.set_xlabel("Simulation Step", fontsize=12)
+
+    ax_main.legend(loc='upper right')
+    ax_ess.legend(loc='upper right')
+    ax_main.grid(True, linestyle=':', alpha=0.7)
+    ax_ess.grid(True, linestyle=':', alpha=0.7)
     plt.tight_layout()
     
     if save_path:

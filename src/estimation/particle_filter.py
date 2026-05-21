@@ -98,22 +98,22 @@ class ParticleFilterRegularized:
         
         # Commit the new weights
         self.weights = new_weights
-        
-        # Apply Bayes' Rule: Update our belief by multiplying the current 
-        # weights by the likelihood of the new observation.
-        self.weights *= likelihoods  
 
-        if self.weights.sum() == 0.0:
-            print("⚠️ CRITICAL WARNING: Particle Extinction Event! All weights collapsed to 0.0. Forcing a uniform reset.")
-        
-        # Add a microscopic constant to all weights. If the sensor reading is 
-        # extreme and assigns 0.0 likelihood to all particles, this prevents a 
-        # fatal ZeroDivisionError during the normalization step below.
-        #self.weights += 1.e-300 
+        # sum_weights = self.weights.sum()
+        # if sum_weights == 0.0 or not np.isfinite(sum_weights):
+        #     print("⚠️ CRITICAL WARNING: Particle Extinction Event! All weights collapsed to 0.0. Forcing a uniform reset.")
+        #     self.weights = np.full_like(self.weights, 1.0 / self.N)
+        # else:
+        #     # Normalize the weights so they represent a valid probability distribution (summing to 1)
+        #     self.weights /= sum_weights
 
-        # Normalize the weights so they represent a valid probability distribution (summing to 1)
+
         sum_weights = self.weights.sum()
-        self.weights /= sum_weights 
+        if sum_weights == 0.0 or not np.isfinite(sum_weights):
+            print("⚠️ CRITICAL WARNING: Particle Extinction Event! All weights collapsed to 0.0. Forcing a uniform reset.")
+            self.weights = np.full_like(self.weights, 1.0 / self.N)
+        else:
+            self.weights /= sum_weights
 
     def resample(self, current_state):
         """

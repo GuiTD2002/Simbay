@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
 
+from src.warp_estimation.warp_container import WarpRobotContainer
+from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
+from src.warp_estimation.warp_motion import WarpPositionMotionModel
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     
 from src.estimation import BinaryContactMeasurementModel
@@ -77,13 +81,31 @@ def main():
     if not USE_REAL_ROBOT: print(f"[Debug] Initial Ground Truth: Y={true_y:.3f}")
 
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
-    container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)
-    
+    # prev
+    # container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)  
+    #   
+    # particle_filter = ParticleFilterRegularized(
+    #     num_particles=NUM_PARTICLES, state_bounds=limits, 
+    #     motion_model=PositionMotionModel(container), 
+    #     measurement_model=BinaryContactMeasurementModel(container), 
+    #     ess_threshold_ratio=ESS_THRESHOLD
+    # )
+
+    # new
+    container = WarpRobotContainer( 
+        num_particles=NUM_PARTICLES,
+        props=DEFAULT_OBJECT_PROPS,
+        dt=robot.dt,
+        nconmax=NUM_PARTICLES * 8,
+        njmax=200,
+        device='cuda:0', # OR 'cpu' if you don't have a GPU altough warp-mujoco+cpu is slower than normal-mujoco+cpu
+    ) 
     particle_filter = ParticleFilterRegularized(
-        num_particles=NUM_PARTICLES, state_bounds=limits, 
-        motion_model=PositionMotionModel(container), 
-        measurement_model=BinaryContactMeasurementModel(container), 
-        ess_threshold_ratio=ESS_THRESHOLD
+        num_particles=NUM_PARTICLES,
+        state_bounds=limits,
+        motion_model=WarpPositionMotionModel(container),
+        measurement_model=WarpBinaryContactMeasurementModel(container),
+        ess_threshold_ratio=ESS_THRESHOLD,
     )
 
 
@@ -189,17 +211,16 @@ def main():
     output_folder = "saved_plots"
 
     # Plot Y
-    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y, 
-                            min_val=-0.2, max_val=0.2, 
+    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
+                            min_val=MIN_Y, max_val=MAX_Y,
                             save_path=f"{output_folder}/y_axis_evolution.png")
     
     # Plot X
-    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x, 
-                            min_val=0.5, max_val=0.6, 
+    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
+                            min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
     
     
 
 if __name__ == "__main__":
     main()
-

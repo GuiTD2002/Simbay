@@ -25,7 +25,7 @@ def sweep_until_contact(
     Executes a complete robotic sweep skill: Hover -> Prep -> Start -> Sweep.
     """
     sweep_direction = (end_pos - start_pos) / np.linalg.norm(end_pos - start_pos)
-    current_joints = _prepare_sweep(robot, robot.get_joints_pos(), start_pos, sweep_direction, target_quat, sweep_vel, safety_distance)
+    current_joints = _prepare_sweep(robot, robot.get_joints_pos(), start_pos, sweep_direction, target_quat, sweep_vel, safety_distance, gif_recorder=gif_recorder)
 
     # Plan Trajectory
     sweep_traj = plan_cartesian_trajectory(current_joints, end_pos, target_quat, sweep_vel, robot.dt)
@@ -94,18 +94,18 @@ def sweep_until_contact(
         if contact:
             print(f"✅ Object detected at step: {step}!")    
             # Retreat safely
-            _execute_safe_retreat(robot, sweep_direction)
+            _execute_safe_retreat(robot, sweep_direction, gif_recorder=gif_recorder)
             break 
     
 
-def _prepare_sweep(robot, current_joints, start_pos, sweep_direction, target_quat, sweep_vel, safety_distance):
+def _prepare_sweep(robot, current_joints, start_pos, sweep_direction, target_quat, sweep_vel, safety_distance, gif_recorder=None):
     """
     Executes the preparation phase of the sweep skill: Move to hover, then prep, then start.
     """ 
     # Get preparation and hover positions
     prep_pos = start_pos - (sweep_direction * safety_distance)
     hover_pos = prep_pos + np.array([0.0, 0.0, 0.1])
-    
+
     # Plan hover trajectory
     hover_traj = plan_cartesian_trajectory(current_joints, hover_pos, target_quat, 0.2, robot.dt)
     hover_settle = plan_settle_trajectory(hover_traj[-1], 0.5, robot.dt)
@@ -115,24 +115,25 @@ def _prepare_sweep(robot, current_joints, start_pos, sweep_direction, target_qua
     prep_traj = plan_cartesian_trajectory(traj_hover[-1], prep_pos, target_quat, 0.2, robot.dt)
     prep_settle = plan_settle_trajectory(prep_traj[-1], 0.5, robot.dt)
     traj_prep = stitch_trajectories(prep_traj, prep_settle)
-    
+
     # Plan start trajectory
     start_traj = plan_cartesian_trajectory(traj_prep[-1], start_pos, target_quat, sweep_vel, robot.dt)
 
-    
+    capture_cb = (lambda: gif_recorder.capture(robot)) if gif_recorder is not None else None
+
     print(f"\n--- Starting Sweep ({int(sweep_direction[0]), int(sweep_direction[1]), int(sweep_direction[2])}) ---")
     print("Moving to hover position...")
-    execute_trajectory(robot, traj_hover)
-    
+    execute_trajectory(robot, traj_hover, callback=capture_cb)
+
     print("Moving to prep position...")
-    execute_trajectory(robot, traj_prep)
-    
+    execute_trajectory(robot, traj_prep, callback=capture_cb)
+
     print("Moving to start position...")
-    execute_trajectory(robot, start_traj)
+    execute_trajectory(robot, start_traj, callback=capture_cb)
 
     return start_traj[-1]
 
-def _execute_safe_retreat(robot, sweep_direction):
+def _execute_safe_retreat(robot, sweep_direction, gif_recorder=None):
     """Safely backs the robot away from the block in cartesian space."""
     safety_distance = 0.01
     current_joints = robot.get_joints_pos()[:7] 
@@ -150,4 +151,5 @@ def _execute_safe_retreat(robot, sweep_direction):
     settle_traj = plan_settle_trajectory(retreat_traj[-1], 0.5, robot.dt)
     full_exit_traj = stitch_trajectories(retreat_traj, settle_traj)
 
-    execute_trajectory(robot, full_exit_traj)
+    capture_cb = (lambda: gif_recorder.capture(robot)) if gif_recorder is not None else None
+    execute_trajectory(robot, full_exit_traj, callback=capture_cb)
