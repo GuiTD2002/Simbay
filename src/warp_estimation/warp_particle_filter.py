@@ -130,9 +130,7 @@ class RayWarpParticleFilter:
         self._sync(snapshot)
 
     def update_internal_state(self, state: dict[str, Any]) -> None:
-        _ray_log(self._debug, f"sending update_internal_state: {_summarize(state)}")
         snapshot = self._ray.get(self._actor.update_internal_state.remote(state))
-        _ray_log(self._debug, f"received update_internal_state: {_summarize(snapshot)}")
         self._sync(snapshot)
 
     def step(
@@ -141,35 +139,20 @@ class RayWarpParticleFilter:
         observation: dict[str, Any],
         current_state: dict[str, Any],
     ) -> None:
-        _ray_log(
-            self._debug,
-            "sending step: "
-            f"control={_summarize(control_input)}, "
-            f"observation={_summarize(observation)}, "
-            f"state={_summarize(current_state)}",
-        )
         snapshot = self._ray.get(
             self._actor.step.remote(control_input, observation, current_state)
         )
-        _ray_log(self._debug, f"received step: {_summarize(snapshot)}")
         self._sync(snapshot)
 
     def record_state(self) -> None:
-        _ray_log(self._debug, "sending record_state")
         snapshot = self._ray.get(self._actor.record_state.remote())
-        _ray_log(self._debug, f"received record_state: {_summarize(snapshot)}")
         self._sync(snapshot)
 
     def estimate(self) -> np.ndarray:
-        _ray_log(self._debug, "sending estimate request")
-        estimate = self._ray.get(self._actor.estimate.remote())
-        _ray_log(self._debug, f"received estimate: {_summarize(estimate)}")
-        return estimate
+        return self._ray.get(self._actor.estimate.remote())
 
     def reset(self, state: dict[str, Any]) -> None:
-        _ray_log(self._debug, f"sending reset: {_summarize(state)}")
         snapshot = self._ray.get(self._actor.reset.remote(state))
-        _ray_log(self._debug, f"received reset: {_summarize(snapshot)}")
         self._sync(snapshot)
 
     def close(self) -> None:
@@ -187,9 +170,7 @@ class RayWarpParticleFilter:
         self.history = snapshot["history"]
 
     def _request_snapshot(self, label: str) -> dict[str, Any]:
-        _ray_log(self._debug, f"sending {label} snapshot request")
         snapshot = self._ray.get(self._actor.snapshot.remote())
-        _ray_log(self._debug, f"received {label} snapshot: {_summarize(snapshot)}")
         return snapshot
 
 
@@ -203,12 +184,7 @@ class _WarpParticleFilterActor:
             _ray_worker_log(debug, "Warp particle filter ready")
 
     def update_internal_state(self, state: dict[str, Any]) -> dict[str, Any]:
-        _ray_worker_log(
-            self._debug,
-            f"received update_internal_state: {_summarize(state)}",
-        )
         self.particle_filter.update_internal_state(state)
-        _ray_worker_log(self._debug, "sending update_internal_state snapshot")
         return self._snapshot()
 
     def step(
@@ -217,37 +193,21 @@ class _WarpParticleFilterActor:
         observation: dict[str, Any],
         current_state: dict[str, Any],
     ) -> dict[str, Any]:
-        _ray_worker_log(
-            self._debug,
-            "received step: "
-            f"control={_summarize(control_input)}, "
-            f"observation={_summarize(observation)}, "
-            f"state={_summarize(current_state)}",
-        )
         self.particle_filter.step(control_input, observation, current_state)
-        _ray_worker_log(self._debug, "sending step snapshot")
         return self._snapshot()
 
     def record_state(self) -> dict[str, Any]:
-        _ray_worker_log(self._debug, "received record_state")
         self.particle_filter.record_state()
-        _ray_worker_log(self._debug, "sending record_state snapshot")
         return self._snapshot()
 
     def estimate(self) -> np.ndarray:
-        _ray_worker_log(self._debug, "received estimate request")
-        estimate = self.particle_filter.estimate()
-        _ray_worker_log(self._debug, f"sending estimate: {_summarize(estimate)}")
-        return estimate
+        return self.particle_filter.estimate()
 
     def reset(self, state: dict[str, Any]) -> dict[str, Any]:
-        _ray_worker_log(self._debug, f"received reset: {_summarize(state)}")
         self.particle_filter.reset(state)
-        _ray_worker_log(self._debug, "sending reset snapshot")
         return self._snapshot()
 
     def snapshot(self) -> dict[str, Any]:
-        _ray_worker_log(self._debug, "received snapshot request")
         return self._snapshot()
 
     def _snapshot(self) -> dict[str, Any]:
