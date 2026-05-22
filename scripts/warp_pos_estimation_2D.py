@@ -10,10 +10,10 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from src.robots import RealRobot
-from src.robots.warp_mujoco_robot import initialize_mujoco_warp_env
 from src.skills import move_to_home
 from src.skills.sweep import sweep_until_contact
 from src.utils import DEFAULT_OBJECT_PROPS
+from src.utils import initialize_mujoco_env
 from src.utils import plot_particle_evolution
 from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
 from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
@@ -64,8 +64,8 @@ def main():
         robot = RealRobot()
         robot.dt = 0.001
     else:
-        robot = initialize_mujoco_warp_env(dt=0.001, device="cuda")
-        robot.sync_host()
+        robot = initialize_mujoco_env()
+        robot.dt = 0.001
         if not HEADLESS and os.environ.get("DISPLAY"):
             viewer = mujoco.viewer.launch_passive(robot.model, robot.data)
             robot.viewer = viewer

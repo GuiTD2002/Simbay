@@ -13,9 +13,6 @@ from typing import Any
 import numpy as np
 
 from src.estimation.particle_filter import ParticleFilterRegularized
-from src.warp_estimation.warp_container import WarpRobotContainer
-from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
-from src.warp_estimation.warp_motion import WarpPositionMotionModel
 
 
 def build_warp_particle_filter(
@@ -30,6 +27,12 @@ def build_warp_particle_filter(
     device: str | None = "cuda:0",
 ) -> ParticleFilterRegularized:
     """Build a Warp-backed particle filter in the current process."""
+    # Imported lazily so the Ray builder doesn't drag warp/mujoco_warp (and their
+    # CUDA driver init) into the local process when the filter only runs remotely.
+    from src.warp_estimation.warp_container import WarpRobotContainer
+    from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
+    from src.warp_estimation.warp_motion import WarpPositionMotionModel
+
     container = WarpRobotContainer(
         num_particles=num_particles,
         props=object_props,
