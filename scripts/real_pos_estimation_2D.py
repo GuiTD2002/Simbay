@@ -8,6 +8,8 @@ import numpy as np
 from src.warp_estimation.warp_container import WarpRobotContainer
 from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
 from src.warp_estimation.warp_motion import WarpPositionMotionModel
+from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
+from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     
@@ -31,12 +33,25 @@ import rclpy
 from src.skills.real_sweep import real_sweep_until_contact, ParticleVisualizer
 
 # ==========================================
+# RAY REMOTE COMPUTE (Optional GPU acceleration)
+# ==========================================
+# Use Ray for distributed GPU compute on remote machine.
+# Disable to run locally: set USE_RAY=False  
+# note: if USE_RAY=false it will use the CPU which is slower on the MujocoWarp so for testing/development <50 particles use the pos_estimation_2d.py
+# script because it will run a small amount of particles faster. 
+USE_RAY = True
+RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP', '10.42.0.26')}:10001"
+RAY_NUM_GPUS = 1.0
+RAY_DEBUG = True
+WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote computer 
+
+# ==========================================
 # CONFIGURATION
 # ==========================================
 USE_REAL_ROBOT = True
 
 # Filter Configuration
-NUM_PARTICLES = 50  
+NUM_PARTICLES = 50
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
@@ -81,32 +96,57 @@ def main():
     if not USE_REAL_ROBOT: print(f"[Debug] Initial Ground Truth: Y={true_y:.3f}")
 
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
-    # prev
-    # container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)  
-    #   
+
+    # UNCOMMENT THIS TO RUN THE PREV VERSION (version 2026-05-20, master)
+    #
+    # container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)
+    #
     # particle_filter = ParticleFilterRegularized(
-    #     num_particles=NUM_PARTICLES, state_bounds=limits, 
-    #     motion_model=PositionMotionModel(container), 
-    #     measurement_model=BinaryContactMeasurementModel(container), 
+    #     num_particles=NUM_PARTICLES, state_bounds=limits,
+    #     motion_model=PositionMotionModel(container),
+    #     measurement_model=BinaryContactMeasurementModel(container),
     #     ess_threshold_ratio=ESS_THRESHOLD
     # )
 
-    # new
-    container = WarpRobotContainer( 
-        num_particles=NUM_PARTICLES,
-        props=DEFAULT_OBJECT_PROPS,
-        dt=robot.dt,
-        nconmax=NUM_PARTICLES * 8,
-        njmax=200,
-        device='cuda:0', # OR 'cpu' if you don't have a GPU altough warp-mujoco+cpu is slower than normal-mujoco+cpu
-    ) 
-    particle_filter = ParticleFilterRegularized(
-        num_particles=NUM_PARTICLES,
-        state_bounds=limits,
-        motion_model=WarpPositionMotionModel(container),
-        measurement_model=WarpBinaryContactMeasurementModel(container),
-        ess_threshold_ratio=ESS_THRESHOLD,
-    )
+    # UNCOMMENT THIS TO RUN THE WARP-ONLY VERSION (version 2026-05-21, no Ray)
+    #
+    # container = WarpRobotContainer(
+    #     num_particles=NUM_PARTICLES,
+    #     props=DEFAULT_OBJECT_PROPS,
+    #     dt=robot.dt,
+    #     nconmax=NUM_PARTICLES * 8,
+    #     njmax=200,
+    #     device=WARP_DEVICE,
+    # )
+    # particle_filter = ParticleFilterRegularized(
+    #     num_particles=NUM_PARTICLES,
+    #     state_bounds=limits,
+    #     motion_model=WarpPositionMotionModel(container),
+    #     measurement_model=WarpBinaryContactMeasurementModel(container),
+    #     ess_threshold_ratio=ESS_THRESHOLD,
+    # )
+
+    # new version 2026-05-22: Ray-enabled particle filter
+    pf_kwargs = {
+        "num_particles": NUM_PARTICLES,
+        "limits": limits,
+        "object_props": DEFAULT_OBJECT_PROPS,
+        "dt": robot.dt,
+        "ess_threshold": ESS_THRESHOLD,
+        "nconmax": NUM_PARTICLES * 8,
+        "njmax": 200,
+        "device": WARP_DEVICE,
+    }
+
+    if USE_RAY:
+        particle_filter = build_ray_warp_particle_filter(
+            **pf_kwargs,
+            num_gpus=RAY_NUM_GPUS,
+            ray_address=RAY_ADDRESS,
+            debug=RAY_DEBUG,
+        )
+    else:
+        particle_filter = build_warp_particle_filter(**pf_kwargs)
 
 
     # ==========================================

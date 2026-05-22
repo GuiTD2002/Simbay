@@ -31,15 +31,24 @@ VIEWER_CAMERA_NAME = "frontal"
 VIEWER_CAMERA_X = 3
 
 # ==========================================
+# RAY REMOTE COMPUTE (Optional GPU acceleration)
+# ==========================================
+# Use Ray for distributed GPU compute on remote machine.
+# Disable to run locally: set USE_RAY=False  
+# note: if USE_RAY=false it will use the CPU which is slower on the MujocoWarp so for testing/development use the pos_estimation_2d.py
+# script because it will run a small amount of particles faster. so use USE_RAY=true this with 200+ particles 
+USE_RAY = True
+USE_GPU = True
+RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP')}:10001"
+RAY_NUM_GPUS = 1.0
+RAY_DEBUG = False
+WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY=True) or local(USE_RAY=False) computer 
+
+# ==========================================
 # CONFIGURATION
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = True
-USE_RAY = True
-RAY_ADDRESS = "ray://10.42.0.24:10001"
-RAY_NUM_GPUS = 1.0
-RAY_DEBUG = True
-
 NUM_PARTICLES = 500
 ESS_THRESHOLD = 0.5
 
@@ -76,27 +85,6 @@ def use_fixed_viewer_camera(viewer, camera_id):
     viewer.cam.fixedcamid = int(camera_id)
 
 
-def create_particle_filter(limits, dt):
-    kwargs = {
-        "num_particles": NUM_PARTICLES,
-        "limits": limits,
-        "object_props": DEFAULT_OBJECT_PROPS,
-        "dt": dt,
-        "ess_threshold": ESS_THRESHOLD,
-        "nconmax": NUM_PARTICLES * 8,
-        "njmax": 300,
-        "device": "cuda:0",
-    }
-
-    if USE_RAY:
-        return build_ray_warp_particle_filter(
-            **kwargs,
-            num_gpus=RAY_NUM_GPUS,
-            ray_address=RAY_ADDRESS,
-            debug=RAY_DEBUG,
-        )
-
-    return build_warp_particle_filter(**kwargs)
 
 
 def main():
@@ -115,8 +103,30 @@ def main():
     if not USE_REAL_ROBOT: print(f"🛑 [Debug] Initial Ground Truth: X={true_x:.3f}, Y={true_y:.3f}")
 
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
-    particle_filter = create_particle_filter(limits, robot.dt)
 
+    # Initialize particle filter with Ray or local (mujoco warp)
+    pf_kwargs = {
+        "num_particles": NUM_PARTICLES,
+        "limits": limits,
+        "object_props": DEFAULT_OBJECT_PROPS,
+        "dt": robot.dt,
+        "ess_threshold": ESS_THRESHOLD,
+        "nconmax": NUM_PARTICLES * 8,
+        "njmax": 300,
+        "device": WARP_DEVICE,
+    }
+
+    if USE_RAY:
+        particle_filter = build_ray_warp_particle_filter(
+            **pf_kwargs,
+            num_gpus=RAY_NUM_GPUS,
+            ray_address=RAY_ADDRESS,
+            debug=RAY_DEBUG,
+        )
+    else:
+        particle_filter = build_warp_particle_filter(**pf_kwargs)
+
+    # GIF recorder substitutes for viewer in headless/remote environments
     gif_recorder = ViewerGifRecorder(
         save_path=GIF_PATH,
         capture_interval=GIF_INTERVAL,

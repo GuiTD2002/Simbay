@@ -4,7 +4,11 @@ IMAGE_TAG ?= demo.2.55.1
 IMAGE ?= $(IMAGE_REPO):$(IMAGE_TAG)
 RAY_CLUSTER_FILE ?= raycluster.yaml
 
-.PHONY: docker-build-image docker-push-image docker-release-image cluster-apply cluster-delete cluster-recreate cluster-status
+.PHONY: help docker-build-image docker-push-image docker-release-image cluster-apply cluster-delete cluster-recreate cluster-status
+
+help:
+	@echo "docker-release-image  Build and push $(IMAGE)"
+	@echo "cluster-recreate     Delete RayCluster, build image, and apply $(RAY_CLUSTER_FILE)"
 
 docker-build-image:
 	docker build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(IMAGE) .
@@ -23,4 +27,5 @@ cluster-delete:
 cluster-recreate: cluster-delete cluster-apply
 
 cluster-status:
-	kubectl get raycluster,pods
+	kubectl get pods -o wide
+
