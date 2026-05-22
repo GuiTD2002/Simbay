@@ -136,6 +136,10 @@ class RayWarpParticleFilter:
         snapshot = self._ray.get(self._actor.update_internal_state.remote(state))
         self._sync(snapshot)
 
+    def predict(self, control_input: dict[str, Any]) -> None:
+        snapshot = self._ray.get(self._actor.predict.remote(control_input))
+        self._sync(snapshot)
+
     def step(
         self,
         control_input: dict[str, Any],
@@ -188,6 +192,10 @@ class _WarpParticleFilterActor:
 
     def update_internal_state(self, state: dict[str, Any]) -> dict[str, Any]:
         self.particle_filter.update_internal_state(state)
+        return self._snapshot()
+
+    def predict(self, control_input: dict[str, Any]) -> dict[str, Any]:
+        self.particle_filter.predict(control_input)
         return self._snapshot()
 
     def step(
