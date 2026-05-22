@@ -154,13 +154,13 @@ def main():
     output_folder = "saved_plots"
 
     # Plot Y
-    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y, 
-                            min_val=-0.2, max_val=0.2, 
+    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
+                            min_val=MIN_Y, max_val=MAX_Y,
                             save_path=f"{output_folder}/y_axis_evolution.png")
 
     # Plot X
-    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x, 
-                            min_val=0.3, max_val=0.6, 
+    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
+                            min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
 
 if __name__ == "__main__":

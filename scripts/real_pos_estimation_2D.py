@@ -5,6 +5,12 @@ import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
 
+from src.warp_estimation.warp_container import WarpRobotContainer
+from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementModel
+from src.warp_estimation.warp_motion import WarpPositionMotionModel
+from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
+from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     
 from src.estimation import BinaryContactMeasurementModel
@@ -25,6 +31,19 @@ import rclpy
 
 # Import the new class you just added to real_sweep.py!
 from src.skills.real_sweep import real_sweep_until_contact, ParticleVisualizer
+
+# ==========================================
+# RAY REMOTE COMPUTE (Optional GPU acceleration)
+# ==========================================
+# Use Ray for distributed GPU compute on remote machine.
+# Disable to run locally: set USE_RAY=False  
+# note: if USE_RAY=false it will use the CPU which is slower on the MujocoWarp so for testing/development <50 particles use the pos_estimation_2d.py
+# script because it will run a small amount of particles faster. 
+USE_RAY = True
+RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP', '10.42.0.26')}:10001"
+RAY_NUM_GPUS = 1.0
+RAY_DEBUG = True
+WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote computer 
 
 # ==========================================
 # CONFIGURATION
@@ -77,14 +96,38 @@ def main():
     if not USE_REAL_ROBOT: print(f"[Debug] Initial Ground Truth: Y={true_y:.3f}")
 
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
-    container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)
+
+    # uncomment to run the original version (version 2026-05-20, master)
+    # container = RobotContainer(num_particles=NUM_PARTICLES, props=DEFAULT_OBJECT_PROPS, dt=robot.dt)
     
-    particle_filter = ParticleFilterRegularized(
-        num_particles=NUM_PARTICLES, state_bounds=limits, 
-        motion_model=PositionMotionModel(container), 
-        measurement_model=BinaryContactMeasurementModel(container), 
-        ess_threshold_ratio=ESS_THRESHOLD
-    )
+    # particle_filter = ParticleFilterRegularized(
+    #     num_particles=NUM_PARTICLES, state_bounds=limits, 
+    #     motion_model=PositionMotionModel(container), 
+    #     measurement_model=BinaryContactMeasurementModel(container), 
+    #     ess_threshold_ratio=ESS_THRESHOLD
+    # )
+
+    # new version 2026-05-22: Ray-enabled particle filter
+    pf_kwargs = {
+        "num_particles": NUM_PARTICLES,
+        "limits": limits,
+        "object_props": DEFAULT_OBJECT_PROPS,
+        "dt": robot.dt,
+        "ess_threshold": ESS_THRESHOLD,
+        "nconmax": NUM_PARTICLES * 8,
+        "njmax": 200,
+        "device": WARP_DEVICE,
+    }
+
+    if USE_RAY:
+        particle_filter = build_ray_warp_particle_filter(
+            **pf_kwargs,
+            num_gpus=RAY_NUM_GPUS,
+            ray_address=RAY_ADDRESS,
+            debug=RAY_DEBUG,
+        )
+    else:
+        particle_filter = build_warp_particle_filter(**pf_kwargs)
 
 
     # ==========================================
@@ -189,13 +232,13 @@ def main():
     output_folder = "saved_plots"
 
     # Plot Y
-    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y, 
-                            min_val=-0.2, max_val=0.2, 
+    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
+                            min_val=MIN_Y, max_val=MAX_Y,
                             save_path=f"{output_folder}/y_axis_evolution.png")
     
     # Plot X
-    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x, 
-                            min_val=0.5, max_val=0.6, 
+    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
+                            min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
     
     
