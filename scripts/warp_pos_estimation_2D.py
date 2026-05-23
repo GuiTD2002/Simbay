@@ -87,7 +87,7 @@ def main():
         "dt": robot.dt,
         "ess_threshold": ESS_THRESHOLD,
         "nconmax": 64,           # per-world contacts (mjw asked for >=29, doubled for headroom)
-        "njmax": 128,            # per-world constraint rows (mjw asked for ~120: nefc overflow)
+        "njmax": 512,            # per-world constraint rows (mjw asked for ~250: nefc overflow, doubled for headroom)
         # mjw constraint: naccdmax <= naconmax (every CCD pair becomes a contact),
         # so nccdmax <= nconmax.
         "nccdmax": 64,
