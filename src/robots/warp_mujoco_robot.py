@@ -50,6 +50,7 @@ class MujocoWarpRobot(BaseRobot):
         naconmax: int | None = None,
         naccdmax: int | None = None,
         device: str | None = None,
+        ccd_iterations: int | None = None,
     ) -> None:
         _require_mjwarp()
 
@@ -76,6 +77,10 @@ class MujocoWarpRobot(BaseRobot):
         self.world_id = world_id
         self.device = device
         self.viewer = None
+
+        # Lower CCD iters before put_model — shrinks per-world EPA buffer width linearly.
+        if ccd_iterations is not None:
+            self.model.opt.ccd_iterations = int(ccd_iterations)
 
         self.warp_model = mjw.put_model(self.model)  # type: ignore[union-attr]
         self.warp_data = mjw.put_data(  # type: ignore[union-attr]

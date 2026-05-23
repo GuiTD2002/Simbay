@@ -37,7 +37,7 @@ WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = False
-NUM_PARTICLES = 500
+NUM_PARTICLES = 1000
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -76,14 +76,22 @@ def main():
     limits = (np.array([MIN_X, MIN_Y]), np.array([MAX_X, MAX_Y]))
 
     # Initialize particle filter with Ray or local (mujoco warp)
+    # NOTE: nconmax/njmax/nccdmax are PER-WORLD. mjw multiplies by nworld
+    # (= NUM_PARTICLES) internally, so e.g. nconmax=8 ⇒ 8 * 500 = 4000 total
+    # contact slots. Setting these to total-counts blows up GPU memory (the
+    # EPA buffer in convex_narrowphase scales as naccdmax * ccd_iterations).
     pf_kwargs = {
         "num_particles": NUM_PARTICLES,
         "limits": limits,
         "object_props": DEFAULT_OBJECT_PROPS,
         "dt": robot.dt,
         "ess_threshold": ESS_THRESHOLD,
-        "nconmax": NUM_PARTICLES * 8,
-        "njmax": 300,
+        "nconmax": 64,           # per-world contacts (mjw asked for >=29, doubled for headroom)
+        "njmax": 128,            # per-world constraint rows (mjw asked for ~120: nefc overflow)
+        # mjw constraint: naccdmax <= naconmax (every CCD pair becomes a contact),
+        # so nccdmax <= nconmax.
+        "nccdmax": 64,
+        "ccd_iterations": 12,    # shrinks EPA buffer width vs MuJoCo's higher default
         "device": WARP_DEVICE,
     }
 

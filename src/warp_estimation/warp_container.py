@@ -63,8 +63,14 @@ class WarpRobotContainer:
     num_particles: int
     props: dict[str, Any]
     dt: float
+    # Per-world buffer caps. nconmax = max contacts per world; nccdmax = max
+    # convex pairs per world (CCD/EPA). Total device alloc scales as cap * nworld,
+    # so keep these tight — naccdmax dominates GPU memory.
     nconmax: int | None = None
     njmax: int | None = None
+    nccdmax: int | None = None
+    naccdmax: int | None = None
+    ccd_iterations: int | None = None
     device: str | None = None
 
     # Generated in __post_init__ — not part of the constructor signature.
@@ -88,6 +94,9 @@ class WarpRobotContainer:
             world_id=0,
             nconmax=self.nconmax,
             njmax=self.njmax,
+            nccdmax=self.nccdmax,
+            naccdmax=self.naccdmax,
+            ccd_iterations=self.ccd_iterations,
             device=self.device,
         )
 

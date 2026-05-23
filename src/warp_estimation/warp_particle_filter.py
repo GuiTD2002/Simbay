@@ -26,6 +26,9 @@ def build_warp_particle_filter(
     *,
     nconmax: int | None = None,
     njmax: int | None = None,
+    nccdmax: int | None = None,
+    naccdmax: int | None = None,
+    ccd_iterations: int | None = None,
     device: str | None = "cuda:0",
 ) -> ParticleFilterRegularized:
     """Build a Warp-backed particle filter in the current process."""
@@ -41,6 +44,9 @@ def build_warp_particle_filter(
         dt=dt,
         nconmax=nconmax,
         njmax=njmax,
+        nccdmax=nccdmax,
+        naccdmax=naccdmax,
+        ccd_iterations=ccd_iterations,
         device=device,
     )
 
@@ -62,6 +68,9 @@ def build_ray_warp_particle_filter(
     *,
     nconmax: int | None = None,
     njmax: int | None = None,
+    nccdmax: int | None = None,
+    naccdmax: int | None = None,
+    ccd_iterations: int | None = None,
     device: str | None = "cuda:0",
     num_gpus: float = 1.0,
     num_cpus: float = 2.0,
@@ -122,6 +131,9 @@ def build_ray_warp_particle_filter(
         ess_threshold=ess_threshold,
         nconmax=nconmax,
         njmax=njmax,
+        nccdmax=nccdmax,
+        naccdmax=naccdmax,
+        ccd_iterations=ccd_iterations,
         device=device,
         debug=debug,
     )
