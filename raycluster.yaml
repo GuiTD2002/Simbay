@@ -5,7 +5,7 @@ metadata:
 spec:
   rayVersion: "2.55.1"
   headGroupSpec:
-    serviceType: ClusterIP
+    serviceType: NodePort 
     rayStartParams:
       dashboard-host: "0.0.0.0"
       num-cpus: "0"
@@ -15,7 +15,7 @@ spec:
         containers:
           - name: ray-head
             image: marianascosta/simbay-ray:demo.2.55.1
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             ports:
               - name: gcs
                 containerPort: 6379
@@ -26,6 +26,10 @@ spec:
             env:
               - name: PYTHONPATH
                 value: /serve_app:/serve_app/src
+              # - name: GRPC_ENABLE_FORK_SUPPORT
+              #   value: "0"
+              # - name: GRPC_POLL_STRATEGY
+              #   value: "poll"
   workerGroupSpecs:
     - groupName: gpu-workers
       replicas: 1
@@ -39,7 +43,7 @@ spec:
           containers:
             - name: ray-worker
               image: marianascosta/simbay-ray:demo.2.55.1
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               resources:
                 limits:
                   nvidia.com/gpu: "1"

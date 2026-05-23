@@ -15,7 +15,7 @@ from src.skills.sweep import sweep_until_contact
 from src.utils import DEFAULT_OBJECT_PROPS
 from src.utils import initialize_mujoco_env
 from src.utils import plot_particle_evolution
-from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
+from src.warp_estimation.warp_particle_filter import RayWarpParticleFilter, build_ray_warp_particle_filter
 from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 
 # ==========================================
@@ -27,16 +27,16 @@ from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 # script because it will run a small amount of particles faster. so use USE_RAY=true this with 200+ particles
 USE_RAY = True
 USE_GPU = True
-RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP')}:10001"
-RAY_NUM_GPUS = 1.0
-RAY_DEBUG = False
+RAY_ADDRESS = os.environ.get('SIMBAY_RAY_IP') # e.g. ray://'localhost:10001'
+RAY_NUM_GPUS = 1.0 
+RAY_DEBUG = True # print ray orchestraion logs + remote worker logs
 WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY=True) or local(USE_RAY=False) computer
 
 # ==========================================
 # CONFIGURATION
 # ==========================================
 USE_REAL_ROBOT = False
-HEADLESS = True
+HEADLESS = False
 NUM_PARTICLES = 500
 ESS_THRESHOLD = 0.5
 
@@ -173,7 +173,7 @@ def main():
     # ==========================================
     # FINISH & RESULTS
     # ==========================================
-    move_to_home(robot)
+    move_to_home(robot, real=USE_REAL_ROBOT)
 
     final_x = particle_filter.estimate()[0]
     final_y = particle_filter.estimate()[1]
@@ -199,7 +199,7 @@ def main():
                             min_val=MIN_X, max_val=MAX_X,
                             save_path=f"{output_folder}/x_axis_evolution.png")
 
-    if hasattr(particle_filter, "close"):
+    if isinstance(particle_filter, RayWarpParticleFilter):
         particle_filter.close()
 
 if __name__ == "__main__":

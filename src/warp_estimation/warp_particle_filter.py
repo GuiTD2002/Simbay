@@ -8,6 +8,8 @@ actor, which is useful when you want GPU process isolation.
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
 import numpy as np
@@ -62,18 +64,43 @@ def build_ray_warp_particle_filter(
     njmax: int | None = None,
     device: str | None = "cuda:0",
     num_gpus: float = 1.0,
+    num_cpus: float = 2.0,
     ray_address: str | None = None,
+    runtime_env: dict[str, Any] | None = None,
     debug: bool = True,
-) -> "RayWarpParticleFilter":
+) -> RayWarpParticleFilter:
     """Build a Warp particle filter inside a Ray actor."""
     _ray_log(debug, "loading Ray")
     ray = _load_ray()
+
+    # The stable Docker image deliberately omits src/scripts, so we ship the
+    # local repo to the cluster as the job's working_dir. Caller can override
+    # via runtime_env.
+    if runtime_env is None:
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+        )
+        runtime_env = {
+            "working_dir": repo_root,
+            # Note: keep `models/` in the upload — MuJoCo XML/meshes are loaded
+            # via the relative path "models/scene.xml" from CWD on the worker.
+            "excludes": [
+                ".git", ".venv", "__pycache__", "saved_plots",
+                "outputs", "*.png", "*.mp4",
+            ],
+        }
 
     owns_ray = False
     if not ray.is_initialized():
         target = ray_address or "local runtime"
         _ray_log(debug, f"initializing Ray connection ({target})")
-        context = ray.init(address=ray_address, ignore_reinit_error=True)
+        context = ray.init(
+            log_to_driver=debug, # see remote logs
+            address=ray_address,
+            ignore_reinit_error=True,
+            runtime_env=runtime_env,
+            logging_level=logging.INFO
+        )
         owns_ray = True
         address = _ray_address(context, target)
         _ray_log(debug, f"connected to Ray at {address}")
@@ -82,9 +109,11 @@ def build_ray_warp_particle_filter(
 
     _ray_log(
         debug,
-        f"creating Warp particle-filter actor (num_gpus={num_gpus}, device={device})",
+        f"creating Warp particle-filter actor "
+        f"(num_cpus={num_cpus}, num_gpus={num_gpus}, device={device})",
     )
-    actor_class = ray.remote(num_gpus=num_gpus)(_WarpParticleFilterActor)
+    # Explicit num_cpus avoids Ray's default actor CPU=0 scheduling surprises.
+    actor_class = ray.remote(num_cpus=num_cpus, num_gpus=num_gpus)(_WarpParticleFilterActor)
     actor = actor_class.remote(
         num_particles=num_particles,
         limits=limits,

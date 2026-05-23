@@ -28,10 +28,6 @@ RUN python -m pip install --no-cache-dir --upgrade pip poetry
 COPY pyproject.toml README.md ./
 RUN poetry install --only main --no-root
 
-COPY src ./src
-COPY scripts ./scripts
-COPY models ./models
-
 RUN mkdir -p saved_plots outputs && chown -R ray /serve_app
 
 USER ray

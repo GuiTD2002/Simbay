@@ -47,16 +47,8 @@ python scripts/warp_pos_estimation_2D.py
 
 ---
 
-## After changing code
-
-Rebuild and push the image (local machine):
 ```
-docker build -t marianascosta/simbay-ray:demo.2.55.1 .
-docker push marianascosta/simbay-ray:demo.2.55.1
+RAY_ADDRESS=127.0.0.1:6379 ray job logs
+python scripts/warp_pos_estimation_2D.py 
 ```
 
-Restart the cluster (remote machine, in `/home/simbay/Documents/Simbay`):
-```
-kubectl delete -f raycluster.yaml --ignore-not-found=true
-kubectl apply -f raycluster.yaml
-```

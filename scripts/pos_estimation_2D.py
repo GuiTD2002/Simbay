@@ -136,7 +136,7 @@ def main():
     # ==========================================
     # FINISH & RESULTS
     # ==========================================
-    move_to_home(robot)
+    move_to_home(robot, real=USE_REAL_ROBOT)
 
     # Final estimate mathematically perfectly balanced by the padded bounds
     final_x = particle_filter.estimate()[0]

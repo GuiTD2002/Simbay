@@ -4,11 +4,15 @@ IMAGE_TAG ?= demo.2.55.1
 IMAGE ?= $(IMAGE_REPO):$(IMAGE_TAG)
 RAY_CLUSTER_FILE ?= raycluster.yaml
 
-.PHONY: help docker-build-image docker-push-image docker-release-image cluster-apply cluster-delete cluster-recreate cluster-status
+.PHONY: help install-dev docker-build-image docker-push-image docker-release-image cluster-apply cluster-delete cluster-recreate cluster-status
 
 help:
+	@echo "install-dev           Install dependencies with dev tools"
 	@echo "docker-release-image  Build and push $(IMAGE)"
-	@echo "cluster-recreate     Delete RayCluster, build image, and apply $(RAY_CLUSTER_FILE)"
+	@echo "cluster-recreate      Delete RayCluster, build image, and apply $(RAY_CLUSTER_FILE)"
+
+install-dev:
+	poetry install --with dev
 
 docker-build-image:
 	docker build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(IMAGE) .
