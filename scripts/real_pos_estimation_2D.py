@@ -1,6 +1,8 @@
 import os
 import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
@@ -10,9 +12,6 @@ from src.warp_estimation.warp_measurement import WarpBinaryContactMeasurementMod
 from src.warp_estimation.warp_motion import WarpPositionMotionModel
 from src.warp_estimation.warp_particle_filter import build_ray_warp_particle_filter
 from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    
 from src.estimation import BinaryContactMeasurementModel
 from src.estimation import ParticleFilterRegularized
 from src.estimation import PositionMotionModel
@@ -245,4 +244,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

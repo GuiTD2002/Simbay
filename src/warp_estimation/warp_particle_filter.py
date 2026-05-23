@@ -174,10 +174,15 @@ class RayWarpParticleFilter:
         self.ess_threshold_ratio = snapshot["ess_threshold_ratio"]
         self.particles = snapshot["particles"]
         self.weights = snapshot["weights"]
-        self.history = snapshot["history"]
+        if "history" in snapshot:
+            self.history = snapshot["history"]
+
+    def get_history(self) -> dict[str, list[np.ndarray]]:
+        self.history = self._ray.get(self._actor.history.remote())
+        return self.history
 
     def _request_snapshot(self, label: str) -> dict[str, Any]:
-        snapshot = self._ray.get(self._actor.snapshot.remote())
+        snapshot = self._ray.get(self._actor.snapshot.remote(include_history=True))
         return snapshot
 
 
@@ -218,17 +223,22 @@ class _WarpParticleFilterActor:
         self.particle_filter.reset(state)
         return self._snapshot()
 
-    def snapshot(self) -> dict[str, Any]:
-        return self._snapshot()
+    def snapshot(self, include_history: bool = False) -> dict[str, Any]:
+        return self._snapshot(include_history=include_history)
 
-    def _snapshot(self) -> dict[str, Any]:
-        return {
+    def history(self) -> dict[str, list[np.ndarray]]:
+        return self.particle_filter.history
+
+    def _snapshot(self, include_history: bool = False) -> dict[str, Any]:
+        snapshot: dict[str, Any] = {
             "N": self.particle_filter.N,
             "ess_threshold_ratio": self.particle_filter.ess_threshold_ratio,
             "particles": self.particle_filter.particles,
             "weights": self.particle_filter.weights,
-            "history": self.particle_filter.history,
         }
+        if include_history:
+            snapshot["history"] = self.particle_filter.history
+        return snapshot
 
 
 def _load_ray() -> Any:

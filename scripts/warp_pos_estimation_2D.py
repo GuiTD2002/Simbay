@@ -187,6 +187,10 @@ def main():
 
     output_folder = "saved_plots"
 
+    if USE_RAY:
+        # does one call to the remote to return the entire history
+        particle_filter.get_history()
+
     plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
                             min_val=MIN_Y, max_val=MAX_Y,
                             save_path=f"{output_folder}/y_axis_evolution.png")

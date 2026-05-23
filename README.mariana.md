@@ -51,7 +51,7 @@ python scripts/warp_pos_estimation_2D.py
 
 Rebuild and push the image (local machine):
 ```
-docker build --build-arg BASE_IMAGE=rayproject/ray:2.55.1-py312-cu129 -t marianascosta/simbay-ray:demo.2.55.1 .
+docker build -t marianascosta/simbay-ray:demo.2.55.1 .
 docker push marianascosta/simbay-ray:demo.2.55.1
 ```
 

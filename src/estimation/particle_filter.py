@@ -50,6 +50,9 @@ class ParticleFilterRegularized:
     def update_internal_state(self, initial_state: dict) -> None:
         self.motion_model.change_internal_state(self.particles, initial_state)
 
+    def get_history(self) -> dict[str, list[np.ndarray]]:
+        return self.history
+
     
     def estimate(self) -> np.ndarray:
         """Calculates the weighted Expected Value."""

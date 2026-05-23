@@ -15,7 +15,7 @@ spec:
         containers:
           - name: ray-head
             image: marianascosta/simbay-ray:demo.2.55.1
-            imagePullPolicy: IfNotPresent
+            imagePullPolicy: Always
             ports:
               - name: gcs
                 containerPort: 6379
@@ -39,7 +39,7 @@ spec:
           containers:
             - name: ray-worker
               image: marianascosta/simbay-ray:demo.2.55.1
-              imagePullPolicy: IfNotPresent
+              imagePullPolicy: Always
               resources:
                 limits:
                   nvidia.com/gpu: "1"
