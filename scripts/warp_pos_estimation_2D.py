@@ -28,7 +28,8 @@ from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 USE_RAY = True
 USE_GPU = True
 RAY_ADDRESS = os.environ.get('SIMBAY_RAY_IP') # e.g. ray://'localhost:10001'
-RAY_NUM_GPUS = 1.0 
+PARTICLES_PER_ACTOR = 250  # shard size; K = ceil(NUM_PARTICLES / PARTICLES_PER_ACTOR)
+GPU_PER_ACTOR = 0.5       # GPU reservation per shard
 RAY_DEBUG = True # print ray orchestraion logs + remote worker logs
 WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY=True) or local(USE_RAY=False) computer
 
@@ -37,7 +38,7 @@ WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = False
-NUM_PARTICLES = 1000
+NUM_PARTICLES = 500
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -98,7 +99,8 @@ def main():
     if USE_RAY:
         particle_filter = build_ray_warp_particle_filter(
             **pf_kwargs,
-            num_gpus=RAY_NUM_GPUS,
+            particles_per_actor=PARTICLES_PER_ACTOR,
+            num_gpus_per_actor=GPU_PER_ACTOR,
             ray_address=RAY_ADDRESS,
             debug=RAY_DEBUG,
         )

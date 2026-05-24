@@ -40,9 +40,10 @@ from src.skills.real_sweep import real_sweep_until_contact, ParticleVisualizer
 # script because it will run a small amount of particles faster. 
 USE_RAY = True
 RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP', '10.42.0.26')}:10001"
-RAY_NUM_GPUS = 1.0
+PARTICLES_PER_ACTOR = 500
+GPU_PER_ACTOR = 0.25
 RAY_DEBUG = True
-WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote computer 
+WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote computer
 
 # ==========================================
 # CONFIGURATION
@@ -121,7 +122,8 @@ def main():
     if USE_RAY:
         particle_filter = build_ray_warp_particle_filter(
             **pf_kwargs,
-            num_gpus=RAY_NUM_GPUS,
+            particles_per_actor=PARTICLES_PER_ACTOR,
+            num_gpus_per_actor=GPU_PER_ACTOR,
             ray_address=RAY_ADDRESS,
             debug=RAY_DEBUG,
         )
