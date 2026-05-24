@@ -51,11 +51,11 @@ WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote compute
 USE_REAL_ROBOT = True
 
 # Filter Configuration
-NUM_PARTICLES = 50  
+NUM_PARTICLES = 1000  
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
-MIN_Y, MAX_Y = 0.0, 0.10
+MIN_Y, MAX_Y = -0.10, 0.20
 MIN_X, MAX_X = 0.5, 0.6
 
 # Sweep Parameters
@@ -114,8 +114,12 @@ def main():
         "object_props": DEFAULT_OBJECT_PROPS,
         "dt": robot.dt,
         "ess_threshold": ESS_THRESHOLD,
-        "nconmax": NUM_PARTICLES * 8,
-        "njmax": 200,
+        "nconmax": 64,           # per-world contacts (mjw asked for >=29, doubled for headroom)
+        "njmax": 512,            # per-world constraint rows (mjw asked for ~250: nefc overflow, doubled for headroom)
+        # mjw constraint: naccdmax <= naconmax (every CCD pair becomes a contact),
+        # so nccdmax <= nconmax.
+        "nccdmax": 64,
+        "ccd_iterations": 12,    # shrinks EPA buffer width vs MuJoCo's higher default
         "device": WARP_DEVICE,
     }
 
@@ -153,6 +157,7 @@ def main():
     # ==========================================
     # PHASE 2: SWEEP BACKWARD (-Y)
     # ==========================================
+    """
     print("\n--- Phase 2: Sweep Backward (-Y) ---")
     start_pos_y2 = np.array([FIXED_X, MAX_Y + MAX_BLOCK_HALF_SIZE_Y + SAFETY_DISTANCE, FIXED_Z])
     end_pos_y2 = np.array([FIXED_X, MIN_Y, FIXED_Z])
@@ -165,11 +170,12 @@ def main():
     )
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 2: {track_ground_truth(robot):.3f}")
-
+    """
 
     # ==========================================
     # PHASE 3: SWEEP BACKWARD (-X)
     # ==========================================
+    """
     print("\n--- Phase 3: Sweep Backward (-X) ---")
     SWEEP_QUAT = np.array([0.0, np.sqrt(2)/2, np.sqrt(2)/2, 0.0])
     FIXED_Y = particle_filter.estimate()[1]  # Use the best Y estimate from Phase 1 and 2
@@ -184,12 +190,14 @@ def main():
     )                           
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 3: {track_ground_truth(robot):.3f}")
-
-
+    """
+    
     # ==========================================
     # PHASE 4: SWEEP FORWARD (+X)
     # ==========================================
     print("\n--- Phase 4: Sweep Forward (+X) ---")
+    FIXED_Y = particle_filter.estimate()[1] 
+    SWEEP_QUAT = np.array([0.0, np.sqrt(2)/2, np.sqrt(2)/2, 0.0])
     start_pos_x1 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE_X - SAFETY_DISTANCE, FIXED_Y, FIXED_Z])
     end_pos_x1 = np.array([MAX_X, FIXED_Y, FIXED_Z])            
 
@@ -201,7 +209,7 @@ def main():
     )       
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 4: {track_ground_truth(robot):.3f}")
-
+    
     # ==========================================
     # PHASE 5: EXTRACTION & HOMING
     # ==========================================
@@ -213,6 +221,7 @@ def main():
     obj_pos = np.array([final_x, final_y, 0.05])
     click_button(robot, obj_pos, velocity=0.1)
     move_to_home(robot)
+    robot.shutdown()
 
     # --- NEW: SHUTDOWN ROS 2 AT THE VERY END ---
     if rclpy.ok():
@@ -231,6 +240,11 @@ def main():
 
     # Create a folder name (optional, helps keep things organized)
     output_folder = "saved_plots"
+
+    if USE_RAY:
+        # does one call to the remote to return the entire history
+        particle_filter.get_history()
+
 
     # Plot Y
     plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,

@@ -107,8 +107,8 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
     torque_history = deque(maxlen=50) # Standard 50-step history
     
 
-    delta_threshold = 0.6 
-    suspicion_threshold = 0.3
+    delta_threshold = 0.4
+
     
     # Distance Setup for Transient Masking
     actual_start_pos = robot.get_ee_pos() 
@@ -153,10 +153,6 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
                 if current_torque_norm > (baseline_torque + delta_threshold):
                     # 🚨 HIT DETECTED
                     contact = 1
-                    
-                elif current_torque_norm > (baseline_torque + suspicion_threshold):
-                    # ⚠️ WARNING ZONE: Freeze baseline
-                    contact = 0
                     
                 else:
                     # 🟢 NORMAL: Update baseline
