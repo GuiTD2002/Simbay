@@ -50,13 +50,18 @@ def build_warp_particle_filter(
         device=device,
     )
 
-    return ParticleFilterRegularized(
+    pf = ParticleFilterRegularized(
         num_particles=num_particles,
         state_bounds=limits,
         motion_model=WarpPositionMotionModel(container),
         measurement_model=WarpBinaryContactMeasurementModel(container),
         ess_threshold_ratio=ess_threshold,
     )
+
+    # force lazy jit compilation so the first real sweep is faster (compilation cost)
+    container.warp_robot.step(1)
+    container.warp_robot.sync_host()
+    return pf
 
 
 def build_ray_warp_particle_filter(
