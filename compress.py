@@ -1,8 +1,8 @@
 import open3d as o3d
 
 # Use your exact paths
-input_path = "/home/lasigerobot24/Desktop/Simbay/models/Task_Board_TBv2023_m3b.stl"
-output_path = "/home/lasigerobot24/Desktop/Simbay/models/task_board_perfect.stl"
+input_path = "./models/Task_Board_TBv2023_m3b.stl"
+output_path = "./models/task_board_perfect.stl"
 
 print("Loading ASCII board...")
 mesh = o3d.io.read_triangle_mesh(input_path)

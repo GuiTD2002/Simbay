@@ -108,6 +108,9 @@ def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None
         return
 
     num_steps = len(particles_np)
+    ess_vals = np.asarray(particle_filter.history.get('ess', []), dtype=float)
+    if ess_vals.size == 0:
+        ess_vals = 1.0 / np.sum(weights_np**2, axis=1)
     
     # ==========================================
     # 2. AXIS CONFIGURATION
@@ -172,27 +175,44 @@ def plot_particle_evolution(particle_filter, dimension=0, ylabel=None, axis=None
     # ==========================================
     # 5. MATPLOTLIB RENDERING
     # ==========================================
-    plt.figure(figsize=(12, 7))
-    sc = plt.scatter(x_vals, p_vals, c=c_vals, cmap='viridis', 
-                     alpha=0.6, s=15, edgecolors='none')
-    cbar = plt.colorbar(sc)
+    fig = plt.figure(figsize=(12, 9), layout="constrained")
+    gs = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=[4, 1],
+        width_ratios=[40, 1],
+    )
+    ax_main = fig.add_subplot(gs[0, 0])
+    ax_ess = fig.add_subplot(gs[1, 0], sharex=ax_main)
+    cbar_ax = fig.add_subplot(gs[0, 1])
+    fig.add_subplot(gs[1, 1]).axis("off")
+
+    sc = ax_main.scatter(x_vals, p_vals, c=c_vals, cmap='viridis',
+                         alpha=0.6, s=15, edgecolors='none')
+    cbar = fig.colorbar(sc, cax=cbar_ax)
     cbar.set_label('Particle Weight (Probability)', fontsize=12, fontweight='bold')
 
-    plt.plot(range(num_steps), e_vals, color='red', linewidth=3, label='Filter Estimate (Mean)')
+    ax_main.plot(range(num_steps), e_vals, color='red', linewidth=3, label='Filter Estimate (Mean)')
     
     if true_pos is not None:
-        plt.axhline(y=true_pos, color='red', linestyle='--', linewidth=2, label=f'True value ({true_pos:.3f})')
+        ax_main.axhline(y=true_pos, color='red', linestyle='--', linewidth=2, label=f'True value ({true_pos:.3f})')
 
-    plt.title(f'Particle Filter: {title_name} Evolution', fontsize=14, fontweight='bold')
-    plt.xlabel('Simulation Step', fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
+    ax_main.set_title(f'Particle Filter: {title_name} Evolution ({num_particles} particles)', fontsize=14, fontweight='bold')
+    ax_main.set_ylabel(ylabel, fontsize=12)
     
     if min_val is not None and max_val is not None:
-        plt.ylim(min_val, max_val) 
+        ax_main.set_ylim(min_val, max_val)
         
-    plt.legend(loc='upper right')
-    plt.grid(True, linestyle=':', alpha=0.7)
-    plt.tight_layout()
+    ess_threshold = particle_filter.N * particle_filter.ess_threshold_ratio
+    ax_ess.plot(range(len(ess_vals)), ess_vals, color="teal", linewidth=2, label="ESS")
+    ax_ess.axhline(y=ess_threshold, color="gray", linestyle="--", linewidth=1.5, label="Resampling Threshold")
+    ax_ess.set_ylabel("ESS", fontsize=12)
+    ax_ess.set_xlabel("Simulation Step", fontsize=12)
+
+    ax_main.legend(loc='upper right')
+    ax_ess.legend(loc='upper right')
+    ax_main.grid(True, linestyle=':', alpha=0.7)
+    ax_ess.grid(True, linestyle=':', alpha=0.7)
     
     if save_path:
         import os
