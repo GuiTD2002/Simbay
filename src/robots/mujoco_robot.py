@@ -1,3 +1,4 @@
+import threading
 import time
 
 import mujoco
@@ -16,6 +17,8 @@ class MujocoRobot(BaseRobot):
         self.dt = dt
         self._last_render_time = time.time()
         self._last_step_time = time.perf_counter()
+        self._traj_stop: threading.Event | None = None
+        self._traj_thread: threading.Thread | None = None
 
         # 1. Setup Force Sensor
         self.force_sensor_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, "hand_force") # type: ignore
@@ -121,6 +124,53 @@ class MujocoRobot(BaseRobot):
             
         # Reset the clock for the next loop
         self._last_step_time = time.perf_counter()
+
+    def move_trajectory_async(self, trajectory, dt2=None):
+        """
+        Fires a trajectory on a background thread: steps the sim at `dt2`
+        and ticks the viewer at ~60 Hz. Returns immediately so the main
+        thread can poll measurements / run the filter independently.
+        """
+        dt2 = dt2 if dt2 is not None else self.dt
+
+        if self._traj_stop is not None:
+            self._traj_stop.set()
+        if self._traj_thread is not None and self._traj_thread.is_alive():
+            self._traj_thread.join()
+
+        stop_evt = threading.Event()
+        self._traj_stop = stop_evt
+
+        def _run(traj, period, stop):
+            last_render = time.perf_counter()
+            for qpos in traj:
+                if stop.is_set():
+                    return
+                target = time.perf_counter() + period
+                self.data.ctrl[:7] = qpos[:7]
+                mujoco.mj_step(self.model, self.data)  # type: ignore
+                now = time.perf_counter()
+                if self.viewer is not None and (now - last_render) > 0.016:
+                    self.viewer.sync()
+                    last_render = now
+                while time.perf_counter() < target:
+                    if stop.is_set():
+                        return
+
+        self._traj_thread = threading.Thread(
+            target=_run, args=(trajectory, dt2, stop_evt), daemon=True
+        )
+        self._traj_thread.start()
+
+    def stop_arm(self):
+        """Stop any background trajectory thread started by move_trajectory_async."""
+        if self._traj_stop is not None:
+            self._traj_stop.set()
+        if self._traj_thread is not None and self._traj_thread.is_alive():
+            self._traj_thread.join()
+
+    def wait_seconds(self, duration):
+        time.sleep(duration)
 
     def print_object_pos(self):
         block_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'object') # type: ignore

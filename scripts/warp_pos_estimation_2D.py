@@ -48,7 +48,7 @@ MIN_Y, MAX_Y = 0.1, 0.2
 FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE = 0.125
 SAFETY_DISTANCE = 0.01
-SWEEP_VEL = 0.5
+SWEEP_VEL = 0.01
 
 def track_ground_truth(robot):
     if USE_REAL_ROBOT: return None, None
