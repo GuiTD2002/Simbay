@@ -74,8 +74,12 @@ class ParticleFilterRegularized:
             observation: The actual sensor reading from the real world or target system.
         """
         likelihoods = self.measurement_model.compute_likelihoods(self.particles, observation)
+        likelihoods = np.nan_to_num(likelihoods, nan=0.0, posinf=0.0, neginf=0.0)
+        current_weights = np.nan_to_num(self.weights, nan=0.0, posinf=0.0, neginf=0.0)
+        if current_weights.sum() <= 0.0:
+            current_weights = np.ones(self.N) / self.N
 
-        new_weights = self.weights * likelihoods
+        new_weights = current_weights * likelihoods
         # ==========================================
         # TRUE BULLSEYE DETECTOR
         # ==========================================
@@ -112,7 +116,7 @@ class ParticleFilterRegularized:
         else:
            self.weights /= sum_weights 
 
-    def resample(self, current_state):
+    def resample(self, current_state, step=None):
         """
         We use Gaussian Kernel instead of Epanechnikov for efficiency purposes. 
         The Gaussian is almost as good and much faster.
@@ -121,7 +125,10 @@ class ParticleFilterRegularized:
         Neff = 1. / np.sum(self.weights**2)
 
         # Only resample if ESS drops below threshold
-        if Neff < self.N * self.ess_threshold_ratio:
+        threshold = self.N * self.ess_threshold_ratio
+        if Neff < threshold:
+            step_msg = f", step={step}" if step is not None else ""
+            print(f"[DEBUG] Resampling particles: ESS={Neff:.2f}, threshold={threshold:.2f}{step_msg}")
 
             # 1. Compute covariance matrix S_k
             nx = self.particles.shape[1]

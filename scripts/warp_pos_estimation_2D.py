@@ -37,16 +37,17 @@ WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = False
-NUM_PARTICLES = 1000
+NUM_PARTICLES = 1500
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
 MIN_X, MAX_X = 0.5, 0.6
-MIN_Y, MAX_Y = 0.0, 0.1
+MIN_Y, MAX_Y = 0.1, 0.2
 
 # Sweep Parameters
-FIXED_Z = 0.09
-MAX_BLOCK_HALF_SIZE = 0.125
+FIXED_Z = 0.08
+MAX_BLOCK_HALF_SIZE_Y = 0.075
+MAX_BLOCK_HALF_SIZE_X = 0.125
 SAFETY_DISTANCE = 0.01
 SWEEP_VEL = 0.01
 
@@ -113,7 +114,7 @@ def main():
     # PHASE 1: SWEEP FORWARD (+Y)
     # ==========================================
     print("\n--- Phase 1: Sweep Forward (+Y) ---")
-    start_pos_y1 = np.array([mid_x, MIN_Y - MAX_BLOCK_HALF_SIZE - SAFETY_DISTANCE, FIXED_Z])
+    start_pos_y1 = np.array([mid_x, MIN_Y - MAX_BLOCK_HALF_SIZE_Y - SAFETY_DISTANCE, FIXED_Z])
     end_pos_y1 = np.array([mid_x, MAX_Y, FIXED_Z])
 
     sweep_until_contact(
@@ -133,7 +134,7 @@ def main():
     # PHASE 2: SWEEP BACKWARD (-Y)
     # ==========================================
     print("\n--- Phase 2: Sweep Backward (-Y) ---")
-    start_pos_y2 = np.array([mid_x, MAX_Y + MAX_BLOCK_HALF_SIZE + SAFETY_DISTANCE, FIXED_Z])
+    start_pos_y2 = np.array([mid_x, MAX_Y + MAX_BLOCK_HALF_SIZE_Y + SAFETY_DISTANCE, FIXED_Z])
     end_pos_y2 = np.array([mid_x, MIN_Y, FIXED_Z])
 
     sweep_until_contact(
@@ -150,7 +151,8 @@ def main():
     # ==========================================
     print("\n--- Phase 3: Sweep Backward (-X) ---")
     estimate_y = particle_filter.estimate()[1]
-    start_pos_x1 = np.array([MAX_X + MAX_BLOCK_HALF_SIZE + SAFETY_DISTANCE, estimate_y, FIXED_Z])
+    estimate_y = np.clip(estimate_y if np.isfinite(estimate_y) else (MIN_Y + MAX_Y) / 2.0, MIN_Y, MAX_Y)
+    start_pos_x1 = np.array([MAX_X + MAX_BLOCK_HALF_SIZE_X + SAFETY_DISTANCE, estimate_y, FIXED_Z])
     end_pos_x1 = np.array([MIN_X, estimate_y, FIXED_Z])
 
     sweep_until_contact(
@@ -167,7 +169,8 @@ def main():
     # ==========================================
     print("\n--- Phase 4: Sweep Forward (+X) ---")
     estimate_y = particle_filter.estimate()[1]
-    start_pos_x2 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE - SAFETY_DISTANCE, estimate_y, FIXED_Z])
+    estimate_y = np.clip(estimate_y if np.isfinite(estimate_y) else (MIN_Y + MAX_Y) / 2.0, MIN_Y, MAX_Y)
+    start_pos_x2 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE_X - SAFETY_DISTANCE, estimate_y, FIXED_Z])
     end_pos_x2 = np.array([MAX_X, estimate_y, FIXED_Z])
 
     sweep_until_contact(

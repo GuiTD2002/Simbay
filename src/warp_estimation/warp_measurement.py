@@ -108,18 +108,16 @@ class WarpBinaryContactMeasurementModel(BaseMeasurementModel):
         ``"hand_torque"`` to match :class:`MujocoWarpRobot`.
     likelihood_negative_info
         Likelihood assigned to a world that registers contact when the real
-        robot does not. Matches the CPU model's ``0.0``.
+        robot does not. Matches the CPU model's ``0.01``.
     likelihood_positive_info
         Likelihood assigned to a world that does *not* register contact when
-        the real robot does. Matches the CPU model's ``0.001``.
+        the real robot does. Matches the CPU model's ``0.01``.
 
     Notes on safety
     ---------------
-    The CPU model uses a hard ``0.0`` for the negative-info case, which
-    causes weight collapse if **every** world is wrong on the same step.
-    The default here preserves that behaviour for compatibility; if you've
-    been hitting "Particle Extinction" warnings, consider passing a tiny
-    epsilon like ``1e-12`` instead.
+    The CPU model uses soft penalties for contact mismatches. Matching that
+    behavior avoids immediate particle extinction when many worlds are wrong
+    on the same step.
     """
 
     def __init__(
@@ -128,8 +126,8 @@ class WarpBinaryContactMeasurementModel(BaseMeasurementModel):
         contact_threshold: float = 0.3,
         *,
         torque_sensor_name: str = "hand_torque",
-        likelihood_negative_info: float = 0.0,
-        likelihood_positive_info: float = 0.001,
+        likelihood_negative_info: float = 0.01,
+        likelihood_positive_info: float = 0.01,
     ) -> None:
         self.container = container
         self.threshold = float(contact_threshold)

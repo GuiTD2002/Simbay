@@ -9,4 +9,9 @@ ros2 launch franka_lxv franka_lxv_bringup.launch.py
 
 # or alternative
 ros2 launch ./ros_ws/src/franka_lxv/launch/franka_lxv_bringup.launch.py
+```
+
+to expose the ray service:
+```
+kubectl port-forward service/simbay-cluster-head-svc 8265:8265 10002:10001
 ``

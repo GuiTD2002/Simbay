@@ -50,15 +50,15 @@ WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote compute
 USE_REAL_ROBOT = True
 
 # Filter Configuration
-NUM_PARTICLES = 1000 
+NUM_PARTICLES = 1500
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
-MIN_Y, MAX_Y = -0.00, 0.10
+MIN_Y, MAX_Y = 0.10, 0.20
 MIN_X, MAX_X = 0.5, 0.6
 
 # Sweep Parameters
-FIXED_Z = 0.09
+FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE_Y = 0.075 
 MAX_BLOCK_HALF_SIZE_X = 0.125
 SAFETY_DISTANCE = 0.02

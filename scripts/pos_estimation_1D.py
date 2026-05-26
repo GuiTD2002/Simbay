@@ -31,10 +31,10 @@ ESS_THRESHOLD = 0.5
 DEBUG_PARTICLE_Y = 0.02
 
 # Workspace Limits (Y)
-MIN_Y, MAX_Y = 0.0, 0.05
+MIN_Y, MAX_Y = 0.1, 0.2
 
 # Sweep Parameters
-FIXED_X = 0.55
+FIXED_X = 0.6
 FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE = 0.075 
 SAFETY_DISTANCE = 0.01
@@ -71,14 +71,14 @@ def main():
         ess_threshold_ratio=ESS_THRESHOLD
     )
 
-    particle_filter.particles[0, 0] = DEBUG_PARTICLE_Y
-    particle_filter.update_internal_state({
-        'qpos': robot.get_joints_pos(),
-        'qvel': robot.get_joints_vel()
-    })
-    particle_viewer = mujoco.viewer.launch_passive(container.robots[0].model, container.robots[0].data)
-    container.robots[0].viewer = particle_viewer
-    print(f"[Debug] Particle 0 viewer pinned at Y={DEBUG_PARTICLE_Y:.3f}")
+    # particle_filter.particles[0, 0] = DEBUG_PARTICLE_Y
+    # particle_filter.update_internal_state({
+    #     'qpos': robot.get_joints_pos(),
+    #     'qvel': robot.get_joints_vel()
+    # })
+    # particle_viewer = mujoco.viewer.launch_passive(container.robots[0].model, container.robots[0].data)
+    # container.robots[0].viewer = particle_viewer
+    # print(f"[Debug] Particle 0 viewer pinned at Y={DEBUG_PARTICLE_Y:.3f}")
 
 
     # ==========================================

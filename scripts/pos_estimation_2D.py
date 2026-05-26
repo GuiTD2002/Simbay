@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
 
-
+# sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.estimation import BinaryContactMeasurementModel
@@ -26,11 +26,10 @@ USE_REAL_ROBOT = False
 
 NUM_PARTICLES = 100
 ESS_THRESHOLD = 0.5
-DEBUG_CENTER_PARTICLE = np.array(DEFAULT_OBJECT_PROPS["pos"][:2])
 
 # Workspace Limits (X, Y)
 MIN_X, MAX_X = 0.5, 0.6
-MIN_Y, MAX_Y = 0.0, 0.1
+MIN_Y, MAX_Y = 0.1, 0.2
 
 # Sweep Parameters
 FIXED_Z = 0.08
@@ -65,18 +64,6 @@ def main():
         motion_model=PositionMotionModel(container), 
         measurement_model=BinaryContactMeasurementModel(container), 
         ess_threshold_ratio=ESS_THRESHOLD
-    )
-
-    particle_filter.particles[0] = DEBUG_CENTER_PARTICLE
-    particle_filter.update_internal_state({
-        'qpos': robot.get_joints_pos(),
-        'qvel': robot.get_joints_vel()
-    })
-    particle_viewer = mujoco.viewer.launch_passive(container.robots[0].model, container.robots[0].data)
-    container.robots[0].viewer = particle_viewer
-    print(
-        "[Debug] Particle 0 viewer pinned at "
-        f"X={DEBUG_CENTER_PARTICLE[0]:.3f}, Y={DEBUG_CENTER_PARTICLE[1]:.3f}"
     )
 
     mid_x = (MIN_X + MAX_X) / 2.0
@@ -173,13 +160,13 @@ def main():
     output_folder = "saved_plots"
 
     # Plot Y
-    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
-                            min_val=MIN_Y, max_val=MAX_Y,
+    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y, 
+                            min_val=-0.2, max_val=0.2, 
                             save_path=f"{output_folder}/y_axis_evolution.png")
 
     # Plot X
-    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
-                            min_val=MIN_X, max_val=MAX_X,
+    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x, 
+                            min_val=0.3, max_val=0.6, 
                             save_path=f"{output_folder}/x_axis_evolution.png")
 
 if __name__ == "__main__":

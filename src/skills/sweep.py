@@ -79,7 +79,7 @@ def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat,
 
         if step % 10 == 0 or contact == 1:
             particle_filter.update(observation)
-            particle_filter.resample(current_state)
+            particle_filter.resample(current_state, step=step)
 
             if visualize and hasattr(robot, 'viewer'):
                 visualize_particles(robot.viewer, particle_filter.particles, particle_filter.weights)
@@ -119,6 +119,10 @@ def _prepare_sweep(robot, current_joints, start_pos, sweep_direction, target_qua
     """
     Executes the preparation phase of the sweep skill: Move to hover, then prep, then start.
     """ 
+    # current_joints = np.asarray(current_joints, dtype=float)[:7]
+    # if not np.all(np.isfinite(current_joints)):
+    #     current_joints = np.zeros(7, dtype=float)
+
     # Get preparation and hover positions
     prep_pos = start_pos - (sweep_direction * safety_distance)
     hover_pos = prep_pos + np.array([0.0, 0.0, 0.1])

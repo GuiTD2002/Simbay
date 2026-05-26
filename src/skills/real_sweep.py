@@ -79,6 +79,20 @@ class ParticleVisualizer(Node):
         self.publisher.publish(marker_array)
 
 
+def debug_pf_y(pf, label=""):
+    y = pf.particles[:, 1]
+    ess = 1.0 / np.sum(pf.weights ** 2)
+    top = np.argsort(pf.weights)[-5:][::-1]
+    print(
+        f"[PF DEBUG {label}] "
+        f"est_y={pf.estimate()[1]:.4f}, "
+        f"y_min={y.min():.4f}, y_max={y.max():.4f}, "
+        f"ESS={ess:.1f}, "
+        f"top_y={y[top]}, "
+        f"top_w={pf.weights[top]}"
+    )
+
+
 def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat, sweep_vel, safety_distance, visualize=False, visualizer=None):
     """
     DEDICATED REAL HARDWARE SCRIPT.
@@ -192,6 +206,13 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
         if step % 10 == 0 or contact == 1:
             particle_filter.update(observation)
             particle_filter.resample(current_state)
+            debug_pf_y(
+                particle_filter,
+                label=(
+                    f"step={step} dir_y={sweep_direction[1]:.3f} "
+                    f"ee_y={current_ee_pos[1]:.4f} contact={contact}"
+                ),
+            )
 
             if visualizer is not None:
                 visualizer.publish_particles(
