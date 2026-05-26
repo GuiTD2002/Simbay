@@ -9,7 +9,7 @@ DEFAULT_OBJECT_PROPS = {
     #"type":     "box",   
     #"size":     (0.25/2, 0.15/2, 0.08/2),      
     "mass":     1.0,                    
-    "pos":      (0.55, 0.02, 0.07),
+    "pos":      (0.55, 0.02, 0.041),
     "angle": np.radians(0)                     
 }
 

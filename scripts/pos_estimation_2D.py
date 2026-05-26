@@ -26,6 +26,7 @@ USE_REAL_ROBOT = False
 
 NUM_PARTICLES = 100
 ESS_THRESHOLD = 0.5
+DEBUG_CENTER_PARTICLE = np.array(DEFAULT_OBJECT_PROPS["pos"][:2])
 
 # Workspace Limits (X, Y)
 MIN_X, MAX_X = 0.5, 0.6
@@ -64,6 +65,18 @@ def main():
         motion_model=PositionMotionModel(container), 
         measurement_model=BinaryContactMeasurementModel(container), 
         ess_threshold_ratio=ESS_THRESHOLD
+    )
+
+    particle_filter.particles[0] = DEBUG_CENTER_PARTICLE
+    particle_filter.update_internal_state({
+        'qpos': robot.get_joints_pos(),
+        'qvel': robot.get_joints_vel()
+    })
+    particle_viewer = mujoco.viewer.launch_passive(container.robots[0].model, container.robots[0].data)
+    container.robots[0].viewer = particle_viewer
+    print(
+        "[Debug] Particle 0 viewer pinned at "
+        f"X={DEBUG_CENTER_PARTICLE[0]:.3f}, Y={DEBUG_CENTER_PARTICLE[1]:.3f}"
     )
 
     mid_x = (MIN_X + MAX_X) / 2.0
