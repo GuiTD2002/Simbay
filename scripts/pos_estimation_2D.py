@@ -1,6 +1,12 @@
+import os
+import sys
+
 import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
+
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.estimation import BinaryContactMeasurementModel
 from src.estimation import ParticleFilterRegularized
@@ -18,12 +24,12 @@ from src.utils import plot_particle_evolution
 # ==========================================
 USE_REAL_ROBOT = False
 
-NUM_PARTICLES = 300
+NUM_PARTICLES = 100
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
 MIN_X, MAX_X = 0.5, 0.6
-MIN_Y, MAX_Y = 0.1, 0.2
+MIN_Y, MAX_Y = 0.0, 0.1
 
 # Sweep Parameters
 FIXED_Z = 0.08

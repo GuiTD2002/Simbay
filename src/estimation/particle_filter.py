@@ -89,6 +89,7 @@ class ParticleFilterRegularized:
             # AND it must not be a Zombie (its accumulated weight must equal the max_weight)
             # (We multiply by 0.99 just to allow for microscopic floating-point rounding errors)
             perfect_mask = (likelihoods >= 0.99) & (new_weights >= max_weight * 0.99) & (max_weight > 0)
+            contact_mask = likelihoods >= 0.99
             
             num_perfect = perfect_mask.sum()
             
@@ -98,6 +99,7 @@ class ParticleFilterRegularized:
                 # If we have 0 perfect particles, it means the ones that hit were Zombies, 
                 # or the ones that survived the sweep missed the contact!
                 print(f"📉 No true perfect particles. Best surviving weight: {max_weight:.2e}")
+            self._print_contact_debug(observation, likelihoods, new_weights, contact_mask, perfect_mask)
         
         # Commit the new weights
         self.weights = new_weights
@@ -183,6 +185,55 @@ class ParticleFilterRegularized:
 
             # 8. Update particles in the motion model
             self.motion_model.change_internal_state(self.particles, current_state)
+
+    def _print_contact_debug(self, observation, likelihoods, new_weights, contact_mask, perfect_mask):
+        direction = np.asarray(observation.get('direction', []), dtype=float)
+        arm_pos = np.asarray(observation.get('arm_pos', []), dtype=float)
+        step_size = observation.get('step_size', None)
+
+        print("   [Contact Debug]")
+        if direction.size > 0:
+            print(f"      sweep direction: {np.array2string(direction, precision=3)}")
+        if arm_pos.size > 0:
+            print(f"      real arm pos: {np.array2string(arm_pos, precision=4)}")
+        if step_size is not None:
+            print(f"      step size: {step_size:.6f}")
+
+        self._print_particle_group_debug("likelihood==1 particles", contact_mask, new_weights)
+        self._print_particle_group_debug("true-perfect particles", perfect_mask, new_weights)
+
+        top_count = min(10, self.N)
+        top_idx = np.argsort(new_weights)[-top_count:][::-1]
+        top_particles = self.particles[top_idx]
+        top_weights = new_weights[top_idx]
+        print(f"      top {top_count} weighted particles:")
+        for rank, (particle, weight, likelihood) in enumerate(
+            zip(top_particles, top_weights, likelihoods[top_idx]), start=1
+        ):
+            print(
+                f"         #{rank}: p={np.array2string(particle, precision=4)} "
+                f"w={weight:.3e} likelihood={likelihood:.3f}"
+            )
+
+    def _print_particle_group_debug(self, label, mask, weights):
+        count = int(np.sum(mask))
+        print(f"      {label}: {count}")
+        if count == 0:
+            return
+
+        selected = self.particles[mask]
+        selected_weights = weights[mask]
+        min_vals = selected.min(axis=0)
+        max_vals = selected.max(axis=0)
+        mean_vals = selected.mean(axis=0)
+        spread_vals = max_vals - min_vals
+        weight_sum = selected_weights.sum()
+
+        print(f"         min:    {np.array2string(min_vals, precision=4)}")
+        print(f"         max:    {np.array2string(max_vals, precision=4)}")
+        print(f"         mean:   {np.array2string(mean_vals, precision=4)}")
+        print(f"         spread: {np.array2string(spread_vals, precision=4)}")
+        print(f"         raw weight sum before normalize: {weight_sum:.3e}")
 
     def step(self, control_input, observation, current_state):
         self.predict(control_input)

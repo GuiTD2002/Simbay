@@ -25,11 +25,11 @@ from src.warp_estimation.warp_particle_filter import build_warp_particle_filter
 # Disable to run locally: set USE_RAY=False
 # note: if USE_RAY=false it will use the CPU which is slower on the MujocoWarp so for testing/development use the pos_estimation_2d.py
 # script because it will run a small amount of particles faster. so use USE_RAY=true this with 200+ particles
-USE_RAY = True
-USE_GPU = True
-RAY_ADDRESS = os.environ.get('SIMBAY_RAY_IP') # e.g. ray://'localhost:10001'
+USE_RAY = False
+USE_GPU = False
+RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP', 'localhost')}:10002"
 RAY_NUM_GPUS = 1.0 
-RAY_DEBUG = True # print ray orchestraion logs + remote worker logs
+RAY_DEBUG = False # print ray orchestraion logs + remote worker logs
 WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY=True) or local(USE_RAY=False) computer
 
 # ==========================================
@@ -42,10 +42,10 @@ ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
 MIN_X, MAX_X = 0.5, 0.6
-MIN_Y, MAX_Y = 0.1, 0.2
+MIN_Y, MAX_Y = 0.0, 0.1
 
 # Sweep Parameters
-FIXED_Z = 0.08
+FIXED_Z = 0.09
 MAX_BLOCK_HALF_SIZE = 0.125
 SAFETY_DISTANCE = 0.01
 SWEEP_VEL = 0.01

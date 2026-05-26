@@ -21,6 +21,11 @@ class ParticleVisualizer(Node):
     def publish_particles(self, particles, weights, fixed_x=0.55, fixed_z=0.09):
         marker_array = MarkerArray()
         
+        # 1. Wipe old RViz ghosts before drawing
+        clear_marker = Marker()
+        clear_marker.action = 3  # Marker.DELETEALL
+        marker_array.markers.append(clear_marker)
+        
         max_weight = max(weights) if len(weights) > 0 else 1.0
         if max_weight < 1e-8: max_weight = 1.0
         
@@ -32,44 +37,42 @@ class ParticleVisualizer(Node):
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = "particles"
             marker.id = i
-            marker.type = Marker.MESH_RESOURCE
-            marker.mesh_resource = "file:///home/lasigerobot24/Desktop/Simbay/models/Task_Board_TBv2023_m3b.stl"
+            
+            # ==========================================
+            # THE DOT VISUALS
+            # ==========================================
+            marker.type = Marker.SPHERE
             marker.action = Marker.ADD
             
-            # --- BOX DIMENSIONS (Meters) ---
-            box_length = 1.0#0.25  # 25 cm (X)
-            box_width  = 1.0#.15  # 15 cm (Y)
-            box_height = 1.0#0.08  # 8 cm  (Z)
+            # --- DOT SIZE (Meters) ---
+            dot_diameter = 0.01  # 1 cm diameter sphere
+            marker.scale.x = dot_diameter
+            marker.scale.y = dot_diameter
+            marker.scale.z = dot_diameter
+            
+            # --- DOT COLOR ---
+            marker.color.r = 0.0
+            marker.color.g = 1.0
+            marker.color.b = 1.0
+            
+            # Adjust transparency based on weight
+            relative_weight = weights[i] / max_weight
+            marker.color.a = max(0.1, float(relative_weight)) # Increased base alpha to 0.1 so small dots are visible
+            # ==========================================
             
             # --- MAP MATH TO 3D SPACE ---
             if dim == 1:
                 marker.pose.position.x = float(fixed_x)
                 marker.pose.position.y = float(particles[i] if particles.ndim == 1 else particles[i, 0])
-                # Assuming table is at Z=0.0 in the base frame! 
-                marker.pose.position.z = 0.05#box_height / 2.0
+                marker.pose.position.z = 0.05
             elif dim == 2:
                 marker.pose.position.x = float(particles[i, 0])
                 marker.pose.position.y = float(particles[i, 1])
-                marker.pose.position.z = 0.05#box_height / 2.0
+                marker.pose.position.z = 0.05
                 
             marker.pose.orientation.w = 1.0
             
-            # --- SIZE & COLOR ---
-            marker.scale.x = box_length
-            marker.scale.y = box_width
-            marker.scale.z = box_height
-            
-            # Color: Cyan/Blue
-            marker.color.r = 0.0
-            marker.color.g = 1.0
-            marker.color.b = 1.0
-            
-            # Transparency: Kept very low (0.02) because 50 large overlapping 
-            # boxes will quickly turn into a solid blue wall!
-            relative_weight = weights[i] / max_weight
-            marker.color.a = max(0.02, float(relative_weight))/2.0
-            
-            # Put the box into the array!
+            # Put the dot into the array!
             marker_array.markers.append(marker)
             
         # Publish the full array
@@ -130,8 +133,6 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
         if elapsed_time > total_duration:
             break
             
-        planned_qpos = get_interpolated_qpos(sweep_traj, robot.dt, elapsed_time)
-
         full_measurements = robot.get_torque_reads() 
         current_torque_norm = np.linalg.norm(full_measurements[:3]) 
         
@@ -172,12 +173,12 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
             'torques'  : full_measurements,
             'contact'  : contact,      
             'direction': sweep_direction,
-            'arm_pos'  : robot.get_ee_pos(), 
+            'arm_pos'  : current_ee_pos,
             'step_size': step_size
         }
         
         ctrl = {
-            'joints' : planned_qpos, 
+            'joints' : real_qpos,
             'gripper': 0.00
         }
         
