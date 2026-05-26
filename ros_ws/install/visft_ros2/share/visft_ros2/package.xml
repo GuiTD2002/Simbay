@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>visft_ros2</name>
+  <version>0.0.1</version>
+  <description>ROS2 driver for VISFT force-torque sensor</description>
+
+  <maintainer email="joao@fc.ul.pt">Joao</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+</package>

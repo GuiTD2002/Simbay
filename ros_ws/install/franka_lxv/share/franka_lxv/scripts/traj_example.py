@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/src/franka_lxv/scripts/traj_example.py

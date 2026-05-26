@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/src/franka_ros2/franka_gripper/scripts/fake_gripper_state_publisher.py

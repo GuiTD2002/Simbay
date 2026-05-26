@@ -100,7 +100,7 @@ def build_ray_warp_particle_filter(
             # via the relative path "models/scene.xml" from CWD on the worker.
             "excludes": [
                 ".git", ".venv", "__pycache__", "saved_plots",
-                "outputs", "*.png", "*.mp4",
+                "outputs", "*.png", "*.mp4", "ros_ws", "node_modules", "venv",
             ],
         }
 
@@ -190,8 +190,8 @@ class RayWarpParticleFilter:
         snapshot = self._ray.get(self._actor.update.remote(observation))
         self._sync(snapshot)
 
-    def resample(self, current_state: dict[str, Any]) -> None:
-        snapshot = self._ray.get(self._actor.resample.remote(current_state))
+    def resample(self, current_state: dict[str, Any], step: int | None = None) -> None:
+        snapshot = self._ray.get(self._actor.resample.remote(current_state, step))
         self._sync(snapshot)
 
     def step(
@@ -261,8 +261,8 @@ class _WarpParticleFilterActor:
         self.particle_filter.update(observation)
         return self._snapshot()
 
-    def resample(self, current_state: dict[str, Any]) -> dict[str, Any]:
-        self.particle_filter.resample(current_state)
+    def resample(self, current_state: dict[str, Any], step: int | None = None) -> dict[str, Any]:
+        self.particle_filter.resample(current_state, step=step)
         return self._snapshot()
 
     def step(

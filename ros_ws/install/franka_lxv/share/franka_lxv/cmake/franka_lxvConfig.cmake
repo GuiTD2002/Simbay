@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_lxv/ament_cmake_core/franka_lxvConfig.cmake

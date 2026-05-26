@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/src/franka_ros2/franka_gazebo/franka_gz_ros2_control/include/gz_ros2_control/gz_system.hpp

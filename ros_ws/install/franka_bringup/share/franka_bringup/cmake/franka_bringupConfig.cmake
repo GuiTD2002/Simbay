@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_bringup/ament_cmake_core/franka_bringupConfig.cmake
