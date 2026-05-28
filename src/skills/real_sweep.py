@@ -245,6 +245,12 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
             
         step += 1
 
+        # ==========================================
+        # 7. THE HARDWARE LOCK 
+        # ==========================================
+        # Force the loop to pause and wait for the next 1000Hz tick!
+        robot.sync()
+
     # ... (Plotting code remains the same) ...
     
     """
@@ -298,7 +304,7 @@ def _real_prepare_sweep(robot, current_joints, start_pos, sweep_direction, targe
     #robot.move_trajectory(start_traj, robot.dt)
 
 
-
+#This is not being used
 def _real_execute_safe_retreat(robot, sweep_direction):
     """Safely backs the robot away from the block in cartesian space."""
     safety_distance = 0.01

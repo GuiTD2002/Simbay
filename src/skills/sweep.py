@@ -13,116 +13,83 @@ from src.utils import visualize_particles
 def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat, sweep_vel, safety_distance, visualize=False):
     """
     Executes a complete robotic sweep skill: Hover -> Prep -> Start -> Sweep.
-
-    The sweep trajectory is fired on a background thread (`move_trajectory_async`)
-    so that the sim step + viewer tick at `robot.dt` independently of the main
-    thread, which polls measurements and runs the particle filter — same
-    structure as `real_sweep_until_contact`.
     """
     sweep_direction = (end_pos - start_pos) / np.linalg.norm(end_pos - start_pos)
     current_joints = _prepare_sweep(robot, robot.get_joints_pos(), start_pos, sweep_direction, target_quat, sweep_vel, safety_distance)
 
     # Plan Trajectory
     sweep_traj = plan_cartesian_trajectory(current_joints, end_pos, target_quat, sweep_vel, robot.dt)
-    step_size = robot.dt * sweep_vel  # How far we move in Cartesian space each step
+    step_size = robot.dt * sweep_vel  # How far we move in Cartesian space each step 
 
     state = {
         'qpos': robot.get_joints_pos(),
         'qvel': robot.get_joints_vel()
     }
+
     particle_filter.update_internal_state(state)
 
-    total_duration = len(sweep_traj) * robot.dt
-    robot.move_trajectory_async(sweep_traj, robot.dt)
-
-    start_time = time.perf_counter()
-    step = 0
-    contact = 0
-    timed_out = False
-
-    # Mirror real_sweep_until_contact: predict every iter, update+resample
-    # throttled to every 10 iters (or on contact), record_state every iter.
-    while True:
-        elapsed_time = time.perf_counter() - start_time
-        if elapsed_time > total_duration:
-            timed_out = True
-            break
-
-        planned_qpos = _get_interpolated_qpos(sweep_traj, robot.dt, elapsed_time)
-
+    for step, qpos in enumerate(sweep_traj):   
         # ==========================================
-        # 1. SENSE
+        # 1. ACT & SENSE (Hardware Layer)
         # ==========================================
+        # Move the joints instantly (Sim updates array, Real blasts network packet)
+        robot.move_joints(qpos)
+        
+        # Read the current physical state
         measurements = robot.get_torque_reads()
         contact = 1 if detect_contact(measurements) else 0
 
+
         # ==========================================
-        # 2. ESTIMATE
+        # 2. ESTIMATE (Math Layer)
         # ==========================================
         observation = {
             'torques'  : measurements,
-            'contact'  : contact,
+            'contact'  : contact, 
             'direction': sweep_direction,
-            'arm_pos'  : robot.get_ee_pos(),
+            'arm_pos'  : robot.get_ee_pos(), 
             'step_size': step_size
         }
         ctrl = {
-            'joints' : planned_qpos,
+            'joints' : qpos,
             'gripper': 0.00
         }
+
         current_state = {
             'qpos': robot.get_joints_pos(),
             'qvel': robot.get_joints_vel()
         }
-
-        particle_filter.predict(ctrl)
-
-        if step % 10 == 0 or contact == 1:
-            particle_filter.update(observation)
-            particle_filter.resample(current_state, step=step)
-
-            if visualize and hasattr(robot, 'viewer'):
-                visualize_particles(robot.viewer, particle_filter.particles, particle_filter.weights)
-
-        particle_filter.record_state()
+        
+        particle_filter.step(ctrl, observation, current_state)
+        particle_filter.record_state()  # Save the current state for visualization later
+            
 
         # ==========================================
-        # 3. RESOLVE CONTACT
+        # 3. RENDER & PACE (The Magic Synchronization)
+        # ==========================================
+        # If the user wants to see it AND the robot actually has a screen, draw the dots!
+        if visualize and hasattr(robot, 'viewer') and step % 20 == 0: # Only update the dots at 50 Hz to avoid performance issues
+            visualize_particles(robot.viewer, particle_filter.particles, particle_filter.weights)
+
+        # Let the robot pace itself!
+        # -> Sim Robot: Skips rendering if it's going too fast (>60 FPS) to save CPU.
+        # -> Real Robot: Calculates exact math time and sleeps the remainder to lock at 1000 Hz.
+        robot.sync() 
+
+        # ==========================================
+        # 4. RESOLVE CONTACT (Safety & Convergence)
         # ==========================================
         if contact:
-            print(f"✅ Object detected at step: {step}!")
-            robot.stop_arm()
-            robot.wait_seconds(0.2)
+            print(f"✅ Object detected at step: {step}!")    
+            # Retreat safely
             _execute_safe_retreat(robot, sweep_direction)
-            break
-
-        step += 1
-
-    if timed_out:
-        robot.stop_arm()
-
-
-def _get_interpolated_qpos(trajectory, dt, elapsed_time):
-    """Return the trajectory waypoint interpolated to `elapsed_time` (stopwatch-paced)."""
-    max_time = (len(trajectory) - 1) * dt
-    t = max(0.0, min(elapsed_time, max_time))
-    index_float = t / dt
-    idx_low = int(np.floor(index_float))
-    idx_high = min(int(np.ceil(index_float)), len(trajectory) - 1)
-    if idx_low == idx_high:
-        return trajectory[idx_low]
-    weight = index_float - idx_low
-    return (1.0 - weight) * np.array(trajectory[idx_low]) + weight * np.array(trajectory[idx_high])
+            break 
     
 
 def _prepare_sweep(robot, current_joints, start_pos, sweep_direction, target_quat, sweep_vel, safety_distance):
     """
     Executes the preparation phase of the sweep skill: Move to hover, then prep, then start.
     """ 
-    # current_joints = np.asarray(current_joints, dtype=float)[:7]
-    # if not np.all(np.isfinite(current_joints)):
-    #     current_joints = np.zeros(7, dtype=float)
-
     # Get preparation and hover positions
     prep_pos = start_pos - (sweep_direction * safety_distance)
     hover_pos = prep_pos + np.array([0.0, 0.0, 0.1])
