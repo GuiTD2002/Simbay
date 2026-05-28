@@ -1,5 +1,5 @@
-<mujoco model="fr3v2 scene">
-  <include file="fr3v2_hand.xml"/>
+<mujoco model="panda scene">
+  <include file="panda.xml"/>
   <include file="props2.xml"/>
 
   <statistic center="0.2 0 0.4" extent=".8"/>

@@ -28,7 +28,8 @@ def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat,
 
     particle_filter.update_internal_state(state)
 
-    for step, qpos in enumerate(sweep_traj):   
+    for step, qpos in enumerate(sweep_traj):
+        #print(qpos)   
         # ==========================================
         # 1. ACT & SENSE (Hardware Layer)
         # ==========================================
@@ -80,7 +81,8 @@ def sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_quat,
         # 4. RESOLVE CONTACT (Safety & Convergence)
         # ==========================================
         if contact:
-            print(f"✅ Object detected at step: {step}!")    
+            print(f"✅ Object detected at step: {step}!")  
+            print(robot.get_joints_pos())  
             # Retreat safely
             _execute_safe_retreat(robot, sweep_direction)
             break 

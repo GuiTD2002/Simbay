@@ -194,6 +194,7 @@ class ParticleFilterRegularized:
             self.motion_model.change_internal_state(self.particles, current_state)
 
     def _print_contact_debug(self, observation, likelihoods, new_weights, contact_mask, perfect_mask):
+        return
         direction = np.asarray(observation.get('direction', []), dtype=float)
         arm_pos = np.asarray(observation.get('arm_pos', []), dtype=float)
         step_size = observation.get('step_size', None)
@@ -223,6 +224,7 @@ class ParticleFilterRegularized:
             )
 
     def _print_particle_group_debug(self, label, mask, weights):
+        return
         count = int(np.sum(mask))
         print(f"      {label}: {count}")
         if count == 0:

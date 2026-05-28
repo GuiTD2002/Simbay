@@ -18,7 +18,7 @@ class FrankaKinematics:
     @classmethod
     def _initialize(cls):
         if cls._model is None:
-            xml_path = os.path.join("models", "fr3v2_nohand.xml")
+            xml_path = os.path.join("models", "panda_nohand.xml")
             if not os.path.exists(xml_path):
                 raise FileNotFoundError(f"Franka XML not found at {xml_path}")
             
