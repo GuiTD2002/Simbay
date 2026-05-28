@@ -2,6 +2,11 @@ import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
 
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 from src.estimation import BinaryContactMeasurementModel
 from src.estimation import ParticleFilterRegularized
 from src.estimation import PositionMotionModel
