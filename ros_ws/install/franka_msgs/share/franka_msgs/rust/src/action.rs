@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_msgs/rosidl_generator_rs/franka_msgs/rust/src/action.rs

@@ -50,15 +50,15 @@ WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote compute
 USE_REAL_ROBOT = True
 
 # Filter Configuration
-NUM_PARTICLES = 1000  
+NUM_PARTICLES = 1500
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
-MIN_Y, MAX_Y = -0.10, 0.20
+MIN_Y, MAX_Y = 0.10, 0.20
 MIN_X, MAX_X = 0.5, 0.6
 
 # Sweep Parameters
-FIXED_Z = 0.09
+FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE_Y = 0.075 
 MAX_BLOCK_HALF_SIZE_X = 0.125
 SAFETY_DISTANCE = 0.02
@@ -83,7 +83,7 @@ def main():
 
     initial_pos = robot.get_joints_pos() 
     if not np.all(initial_pos == FRANKA_HOME_QPOS):
-        move_to_home(robot) 
+        move_to_home(robot, velocity=0.3) 
 
     # --- NEW: INITIALIZE ROS 2 VISUALIZER ---
     print("Initializing RViz Particle Visualizer...")
@@ -155,7 +155,7 @@ def main():
     # ==========================================
     # PHASE 2: SWEEP BACKWARD (-Y)
     # ==========================================
-    """
+    
     print("\n--- Phase 2: Sweep Backward (-Y) ---")
     start_pos_y2 = np.array([FIXED_X, MAX_Y + MAX_BLOCK_HALF_SIZE_Y + SAFETY_DISTANCE, FIXED_Z])
     end_pos_y2 = np.array([FIXED_X, MIN_Y, FIXED_Z])
@@ -168,12 +168,12 @@ def main():
     )
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 2: {track_ground_truth(robot):.3f}")
-    """
+    
 
     # ==========================================
     # PHASE 3: SWEEP BACKWARD (-X)
     # ==========================================
-    """
+    
     print("\n--- Phase 3: Sweep Backward (-X) ---")
     SWEEP_QUAT = np.array([0.0, np.sqrt(2)/2, np.sqrt(2)/2, 0.0])
     FIXED_Y = particle_filter.estimate()[1]  # Use the best Y estimate from Phase 1 and 2
@@ -188,13 +188,13 @@ def main():
     )                           
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 3: {track_ground_truth(robot):.3f}")
-    """
+    
     
     # ==========================================
     # PHASE 4: SWEEP FORWARD (+X)
     # ==========================================
     print("\n--- Phase 4: Sweep Forward (+X) ---")
-    FIXED_Y = particle_filter.estimate()[1] 
+    #FIXED_Y = particle_filter.estimate()[1] 
     SWEEP_QUAT = np.array([0.0, np.sqrt(2)/2, np.sqrt(2)/2, 0.0])
     start_pos_x1 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE_X - SAFETY_DISTANCE, FIXED_Y, FIXED_Z])
     end_pos_x1 = np.array([MAX_X, FIXED_Y, FIXED_Z])            

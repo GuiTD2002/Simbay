@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_semantic_components/ament_cmake_core/franka_semantic_componentsConfig.cmake

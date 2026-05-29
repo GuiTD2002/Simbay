@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/lxros/ament_cmake_core/lxrosConfig-version.cmake

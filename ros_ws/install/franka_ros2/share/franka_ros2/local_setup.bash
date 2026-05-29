@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_ros2/ament_cmake_environment_hooks/local_setup.bash

@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_msgs/rosidl_generator_cpp/franka_msgs/action/error_recovery.hpp

@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_msgs/rosidl_cmake/rosidl_cmake-extras.cmake

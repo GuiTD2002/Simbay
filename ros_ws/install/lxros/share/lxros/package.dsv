@@ -1,0 +1,11 @@
+source;share/lxros/hook/cmake_prefix_path.ps1
+source;share/lxros/hook/cmake_prefix_path.dsv
+source;share/lxros/hook/cmake_prefix_path.sh
+source;share/lxros/hook/pythonpath.ps1
+source;share/lxros/hook/pythonpath.dsv
+source;share/lxros/hook/pythonpath.sh
+source;share/lxros/local_setup.bash
+source;share/lxros/local_setup.dsv
+source;share/lxros/local_setup.ps1
+source;share/lxros/local_setup.sh
+source;share/lxros/local_setup.zsh

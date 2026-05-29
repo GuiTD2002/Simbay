@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/src/franka_description/launch/visualize_franka_duo.launch.py

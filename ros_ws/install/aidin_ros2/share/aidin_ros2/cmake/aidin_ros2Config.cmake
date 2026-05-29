@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/aidin_ros2/ament_cmake_core/aidin_ros2Config.cmake

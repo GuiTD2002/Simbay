@@ -8,8 +8,8 @@ import numpy as np
 DEFAULT_OBJECT_PROPS = {
     #"type":     "box",   
     #"size":     (0.25/2, 0.15/2, 0.08/2),      
-    "mass":     1.0,                    
-    "pos":      (0.55, 0.15, 0.07),
+    "mass":     10000.0,                    
+    "pos":      (0.55, 0.15, 0.04),
     "angle": np.radians(0)                     
 }
 

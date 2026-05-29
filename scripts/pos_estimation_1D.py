@@ -1,3 +1,5 @@
+
+#!/usr/bin/env python
 import os
 import sys
 
@@ -28,12 +30,13 @@ USE_REAL_ROBOT = False
 # Filter Configuration
 NUM_PARTICLES = 50  
 ESS_THRESHOLD = 0.5
+DEBUG_PARTICLE_Y = 0.17
 
 # Workspace Limits (Y)
 MIN_Y, MAX_Y = 0.1, 0.2
 
 # Sweep Parameters
-FIXED_X = 0.6
+FIXED_X = 0.55
 FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE = 0.075 
 SAFETY_DISTANCE = 0.01
@@ -70,8 +73,14 @@ def main():
         ess_threshold_ratio=ESS_THRESHOLD
     )
 
+    #particle_filter.particles[0, 0] = DEBUG_PARTICLE_Y
+    #particle_filter.update_internal_state({
+        #'qpos': robot.get_joints_pos(),
+        #'qvel': robot.get_joints_vel()
+    #})
     #particle_viewer = mujoco.viewer.launch_passive(container.robots[0].model, container.robots[0].data)
     #container.robots[0].viewer = particle_viewer
+    #print(f"[Debug] Particle 0 viewer pinned at Y={DEBUG_PARTICLE_Y:.3f}")
 
 
     # ==========================================
@@ -85,7 +94,7 @@ def main():
     sweep_until_contact(
         robot=robot, particle_filter=particle_filter, start_pos=start_pos_y1,
         end_pos=end_pos_y1, target_quat=SWEEP_QUAT, sweep_vel=SWEEP_VEL,
-        safety_distance=SAFETY_DISTANCE, visualize=not USE_REAL_ROBOT
+        safety_distance=SAFETY_DISTANCE, visualize=True
     )
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 1: {track_ground_truth(robot):.3f}")
@@ -101,7 +110,7 @@ def main():
     sweep_until_contact(
         robot=robot, particle_filter=particle_filter, start_pos=start_pos_y2,
         end_pos=end_pos_y2, target_quat=SWEEP_QUAT, sweep_vel=SWEEP_VEL,
-        safety_distance=SAFETY_DISTANCE, visualize=not USE_REAL_ROBOT
+        safety_distance=SAFETY_DISTANCE, visualize=True
     )
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 2: {track_ground_truth(robot):.3f}")

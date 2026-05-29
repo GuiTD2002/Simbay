@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/haply_ros2/ament_cmake_core/haply_ros2Config-version.cmake

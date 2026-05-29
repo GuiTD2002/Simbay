@@ -59,11 +59,11 @@ class BinaryContactMeasurementModel(BaseMeasurementModel):
             # Negative Info (Kill Partiles hit before real_robot)
             # ==========================================
             if real_contact == 0 and contact == 1:  # Negative Info (Kill Partiles hit before real_robot)
-                likelihoods[i] = 0.001
+                likelihoods[i] = 0.01
                 #print("Killed because contact")
 
             elif real_contact == 1 and contact == 0: # Positive Info (Kill Particles that haven't hit when real_robot has)
-                likelihoods[i] = 0.001
+                likelihoods[i] = 0.01
                 #print("killed because no contact")
 
 

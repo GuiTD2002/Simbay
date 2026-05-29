@@ -1,6 +1,14 @@
+import os
+import sys
+
 import matplotlib.pyplot as plt
 import mujoco.viewer
 import numpy as np
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from src.estimation import BinaryContactMeasurementModel
 from src.estimation import ParticleFilterRegularized
@@ -18,7 +26,7 @@ from src.utils import plot_particle_evolution
 # ==========================================
 USE_REAL_ROBOT = False
 
-NUM_PARTICLES = 300
+NUM_PARTICLES = 100
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -27,7 +35,8 @@ MIN_Y, MAX_Y = 0.1, 0.2
 
 # Sweep Parameters
 FIXED_Z = 0.08
-MAX_BLOCK_HALF_SIZE = 0.125 
+MAX_BLOCK_HALF_SIZE_X = 0.125 
+MAX_BLOCK_HALF_SIZE_Y = 0.075
 SAFETY_DISTANCE = 0.01
 SWEEP_VEL = 0.1
 
@@ -68,7 +77,7 @@ def main():
     # PHASE 1: SWEEP FORWARD (+Y)
     # ==========================================
     print("\n--- Phase 1: Sweep Forward (+Y) ---")
-    start_pos_y1 = np.array([mid_x, MIN_Y - MAX_BLOCK_HALF_SIZE - SAFETY_DISTANCE, FIXED_Z])
+    start_pos_y1 = np.array([mid_x, MIN_Y - MAX_BLOCK_HALF_SIZE_Y - SAFETY_DISTANCE, FIXED_Z])
     end_pos_y1 = np.array([mid_x, MAX_Y, FIXED_Z])
 
     sweep_until_contact(
@@ -88,7 +97,7 @@ def main():
     # PHASE 2: SWEEP BACKWARD (-Y)
     # ==========================================
     print("\n--- Phase 2: Sweep Backward (-Y) ---")
-    start_pos_y2 = np.array([mid_x, MAX_Y + MAX_BLOCK_HALF_SIZE + SAFETY_DISTANCE, FIXED_Z])
+    start_pos_y2 = np.array([mid_x, MAX_Y + MAX_BLOCK_HALF_SIZE_Y + SAFETY_DISTANCE, FIXED_Z])
     end_pos_y2 = np.array([mid_x, MIN_Y, FIXED_Z])
 
     sweep_until_contact(
@@ -105,7 +114,8 @@ def main():
     # ==========================================
     print("\n--- Phase 3: Sweep Backward (-X) ---")
     estimate_y = particle_filter.estimate()[1]
-    start_pos_x1 = np.array([MAX_X + MAX_BLOCK_HALF_SIZE + SAFETY_DISTANCE, estimate_y, FIXED_Z])
+    start_pos_y2 = np.array([mid_x, MAX_Y + MAX_BLOCK_HALF_SIZE_X + SAFETY_DISTANCE, FIXED_Z])
+    start_pos_x1 = np.array([MAX_X + MAX_BLOCK_HALF_SIZE_X + SAFETY_DISTANCE, estimate_y, FIXED_Z])
     end_pos_x1 = np.array([MIN_X, estimate_y, FIXED_Z])
 
     sweep_until_contact(
@@ -122,7 +132,7 @@ def main():
     # ==========================================
     print("\n--- Phase 4: Sweep Forward (+X) ---")
     estimate_y = particle_filter.estimate()[1]
-    start_pos_x2 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE - SAFETY_DISTANCE, estimate_y, FIXED_Z])
+    start_pos_x2 = np.array([MIN_X - MAX_BLOCK_HALF_SIZE_X - SAFETY_DISTANCE, estimate_y, FIXED_Z])
     end_pos_x2 = np.array([MAX_X, estimate_y, FIXED_Z])
 
     sweep_until_contact(
@@ -154,13 +164,13 @@ def main():
     output_folder = "saved_plots"
 
     # Plot Y
-    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y,
-                            min_val=MIN_Y, max_val=MAX_Y,
+    plot_particle_evolution(particle_filter, axis='y', true_pos=true_y, 
+                            min_val=-0.2, max_val=0.2, 
                             save_path=f"{output_folder}/y_axis_evolution.png")
 
     # Plot X
-    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x,
-                            min_val=MIN_X, max_val=MAX_X,
+    plot_particle_evolution(particle_filter, axis='x', true_pos=true_x, 
+                            min_val=0.3, max_val=0.6, 
                             save_path=f"{output_folder}/x_axis_evolution.png")
 
 if __name__ == "__main__":

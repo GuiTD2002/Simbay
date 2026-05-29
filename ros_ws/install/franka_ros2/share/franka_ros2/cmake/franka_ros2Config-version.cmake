@@ -1,0 +1,1 @@
+/home/lasigerobot24/ros_ws/build/franka_ros2/ament_cmake_core/franka_ros2Config-version.cmake
