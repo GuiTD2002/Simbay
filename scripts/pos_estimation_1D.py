@@ -40,7 +40,7 @@ FIXED_X = 0.55
 FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE = 0.075 
 SAFETY_DISTANCE = 0.01
-SWEEP_VEL = 0.1
+SWEEP_VEL = 0.05
 SWEEP_QUAT = np.array([0.0, 1.0, 0.0, 0.0])
 
 
@@ -125,7 +125,7 @@ def main():
 
     print(final_y)
     obj_pos = np.array([FIXED_X, final_y, FIXED_Z])
-    click_button(robot, obj_pos, real=False)
+    #click_button(robot, obj_pos, real=False)
     move_to_home(robot, real=False)
 
     print("\n" + "="*40)

@@ -36,10 +36,10 @@ NUM_PARTICLES = 50
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
-MIN_Y, MAX_Y = 0.0, 0.10
+MIN_Y, MAX_Y = 0.0, 0.15
 
 # Sweep Parameters
-FIXED_X = 0.55
+FIXED_X = 0.5
 FIXED_Z = 0.09
 MAX_BLOCK_HALF_SIZE = 0.075 
 SAFETY_DISTANCE = 0.02
@@ -60,7 +60,7 @@ def main():
         robot.dt = 0.001 
     else:
         robot = initialize_mujoco_env()
-        robot.dt = 0.001 
+        robot.dt = 0.001
         robot.viewer = mujoco.viewer.launch_passive(robot.model, robot.data)
 
     initial_pos = robot.get_joints_pos() 
@@ -106,6 +106,8 @@ def main():
     )
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 1: {track_ground_truth(robot):.3f}")
+
+    
 
 
     # ==========================================

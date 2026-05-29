@@ -5,6 +5,7 @@ import numpy as np
 
 from .base import BaseRobot
 
+
 # --- CONDITIONAL IMPORTS ---
 try:
     import rclpy
@@ -16,6 +17,7 @@ try:
     from trajectory_msgs.msg import JointTrajectory
     from trajectory_msgs.msg import JointTrajectoryPoint
     from tf2_ros import Buffer, TransformListener
+    from builtin_interfaces.msg import Time
     ROS_AVAILABLE = True
 except ImportError:
     ROS_AVAILABLE = False
@@ -36,8 +38,8 @@ class RealRobot(BaseRobot):
         
         # 1. Setup Joint Names
         self.joint_names = [
-            "fr3_joint1", "fr3_joint2", "fr3_joint3", 
-            "fr3_joint4", "fr3_joint5", "fr3_joint6", "fr3_joint7"
+            "panda_joint1", "panda_joint2", "panda_joint3", 
+            "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"
         ]
         self.current_joints = None
         self.current_velocities = np.zeros(7)
@@ -55,8 +57,8 @@ class RealRobot(BaseRobot):
         self.node1 = rclpy.create_node("simbay_real_robot_node")
         
         # Arm Publisher & Subscriber
-        self.pub1 = self.node1.create_publisher(JointTrajectory, "/fr3_arm_controller/joint_trajectory", 10)
         self.sub1 = self.node1.create_subscription(JointState, "/joint_states", self.jointstate_callback, 10)
+        self.pub1 = self.node1.create_publisher(JointTrajectory, "/joint_trajectory_controller/joint_trajectory", 10)
         
         # Force/Torque Sensor Subscriber
         self.sub_wrench = self.node1.create_subscription(
@@ -67,7 +69,7 @@ class RealRobot(BaseRobot):
         )
         
         # Gripper Action Client
-        self.gripper_client = ActionClient(self.node1, Move, '/franka_gripper/move')
+        self.gripper_client = ActionClient(self.node1, Move, '/panda_gripper/move')
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self.node1)
@@ -209,8 +211,8 @@ class RealRobot(BaseRobot):
             # Lookup transform from base ('fr3_link0') to end-effector ('fr3_link8' or 'fr3_hand')
             # Note: If your lab uses different TF names, adjust these strings!
             trans = self.tf_buffer.lookup_transform(
-                "fr3_link0", 
-                "fr3_link8", # Alternatively "fr3_hand" or "fr3_EE" depending on your launch file
+                "panda_link0", 
+                "panda_link8", # Alternatively "fr3_hand" or "fr3_EE" depending on your launch file
                 rclpy.time.Time()
             )
             
@@ -285,22 +287,50 @@ class RealRobot(BaseRobot):
         # 4. Reset the clock for the start of the next loop
         self._last_sync_time = time.perf_counter()
     
-    
+    """
     def move_trajectory(self, trajectory, dt2):
         msg = JointTrajectory()
         msg.joint_names = self.joint_names
+        msg.header.stamp = self.node1.get_clock().now().to_msg()
+        t = 0.1
+        for pos in trajectory:
+            point = JointTrajectoryPoint()
+            point.positions = list(pos)
+            #point.time_from_start = Duration(nanoseconds=int(t * 1e9)).to_msg()
+            point.time_from_start = Duration(nanoseconds=int(1e9+t * 1e9)).to_msg()            
+            t += dt2
+            msg.points.append(point)
+
+        print(f'#####\nStart:\n {msg.points[0]} \n End:\n {msg.points[-1]}\n#######\n\n')
+
+        # Publish the movement and return instantly
+        self.pub1.publish(msg)
+        self.wait_seconds(t - dt2 + 1.1) # Wait for the whole trajectory to finish plus a small buffer. Don't delete!!!!
+    """
+
+    def original_move_trajectory(self, trajectory, dt2,assinc=False):
+        msg = JointTrajectory()
+        msg.joint_names = self.joint_names
+        #msg.header.stamp = Time()
         msg.header.stamp = self.node1.get_clock().now().to_msg()
         t = 0.01
         for pos in trajectory:
             point = JointTrajectoryPoint()
             point.positions = list(pos)
             point.time_from_start = Duration(nanoseconds=int(t * 1e9)).to_msg()
+            #point.time_from_start = Duration(seconds=t).to_msg()            
             t += dt2
             msg.points.append(point)
 
         # Publish the movement and return instantly
+        #print(msg)
+        print(f'##((({len(msg.points)}))))###\nStart:\n {msg.points[0]} \n End:\n {msg.points[-1]}\n#######\n\n')
         self.pub1.publish(msg)
-        self.wait_seconds(t - dt2 + 0.1) # Wait for the whole trajectory to finish plus a small buffer. Don't delete!!!!
+        if assinc:
+            self.wait_seconds(0.1) # Wait for the whole trajectory to finish plus a small buffer. Don't delete!!!!
+        else:            
+            self.wait_seconds(t - dt2 + 1.1) # Wait for the whole trajectory to finish plus a small buffer. Don't delete!!!!
+        
 
 
     def wait_seconds(self, duration):
@@ -330,20 +360,20 @@ class RealRobot(BaseRobot):
         """
         msg = JointTrajectory()
         msg.joint_names = self.joint_names
+        #msg.header.stamp = Time()
         msg.header.stamp = self.node1.get_clock().now().to_msg()
-        
-        t = 0.01 # Small initial buffer
+        t = 0.01
         for pos in trajectory:
             point = JointTrajectoryPoint()
             point.positions = list(pos)
-            
-            # Safely convert float time to ROS 2 nanoseconds
-            point.time_from_start = Duration(nanoseconds=int(t * 1e9)).to_msg() 
-            
+            point.time_from_start = Duration(nanoseconds=int(t * 1e9)).to_msg()
+            #point.time_from_start = Duration(seconds=t).to_msg()            
             t += dt2
             msg.points.append(point)
 
-        # Publish the full path to the Trajectory Controller
+        # Publish the movement and return instantly
+        print(f'##((!({len(msg.points)}))))###\nStart:\n {msg.points[0]} \n End:\n {msg.points[-1]}\n#######\n\n')
+        #print(msg)
         self.pub1.publish(msg)
         
         # CRITICAL DIFFERENCE: 
@@ -377,13 +407,14 @@ class RealRobot(BaseRobot):
         # Command it to achieve this "stopped" state almost immediately (50ms).
         # We use 50ms instead of 0.0s to give the internal math time to smoothly brake
         # without triggering a violent jerk or Reflex Error.
-        point.time_from_start = Duration(nanoseconds=int(0.05 * 1e9)).to_msg()
+        point.time_from_start = Duration(nanoseconds=int(0.1 * 1e9)).to_msg()
         
         msg.points = [point]
         
         # 4. Fire the stop command!
         # (Note: Double check if your publisher is named self.pub1 or self.pub_traj 
         # based on your __init__ setup, and adjust if necessary!)
+        print(f'##((())))###\nStart:\n {msg.points[0]} \n End:\n {msg.points[-1]}\n#######\n\n')
         self.pub1.publish(msg)
 
     

@@ -31,7 +31,7 @@ def move_to_home(robot, velocity=0.5, real = True):
     if not real:
         execute_trajectory(robot, full_home_traj)
     else:
-        robot.move_trajectory(full_home_traj, dt)
+        robot.original_move_trajectory(full_home_traj, dt)
     
     print("✅ Robot is perfectly Homed and Rigidlly Settled!")
 

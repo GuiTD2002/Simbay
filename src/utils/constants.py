@@ -15,6 +15,7 @@ DEFAULT_OBJECT_PROPS = {
 
 FRANKA_HOME_QPOS = np.array([0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, -0.7853])
 
+
 FRANKA_HOME_XYZ = np.array([0.55450, -0.00000, 0.52109])
 
 #x = 25 cm

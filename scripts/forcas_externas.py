@@ -49,7 +49,7 @@ class ExternalWrenchPublisher(Node):
         # Populate Header
         wrench_msg.header.stamp = self.get_clock().now().to_msg()
         # Defaulting to standard franka base frame. Adjust to 'panda_link0' if necessary.
-        wrench_msg.header.frame_id = 'franka_link0'
+        wrench_msg.header.frame_id = 'panda_link0'
 
         # Extract o_f_ext_hat_k (float64[6] array representing [Fx, Fy, Fz, Tx, Ty, Tz])
         ext_wrench = self.latest_state_msg.o_f_ext_hat_k

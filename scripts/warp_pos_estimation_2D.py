@@ -37,7 +37,7 @@ WARP_DEVICE = "cuda:0" if USE_GPU else "cpu" # use the gpu on the remote(USE_RAY
 # ==========================================
 USE_REAL_ROBOT = False
 HEADLESS = False
-NUM_PARTICLES = 1500
+NUM_PARTICLES = 1000
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (X, Y)
@@ -49,7 +49,7 @@ FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE_Y = 0.075
 MAX_BLOCK_HALF_SIZE_X = 0.125
 SAFETY_DISTANCE = 0.01
-SWEEP_VEL = 0.01
+SWEEP_VEL = 0.1
 
 def track_ground_truth(robot):
     if USE_REAL_ROBOT: return None, None

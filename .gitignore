@@ -12,6 +12,8 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+ros_venv
+ros_env
 
 # --- Environments & IDEs ---
 .venv/

@@ -41,7 +41,7 @@ def click_button(robot, obj_pos, velocity=0.05, real = True):
     if not real:
         execute_trajectory(robot, full_home_traj)
     else:
-        robot.move_trajectory(full_home_traj, dt)
+        robot.original_move_trajectory(full_home_traj, dt)
 
 
     # Plan the move, then stitch a rigid settle at the end!
@@ -55,9 +55,9 @@ def click_button(robot, obj_pos, velocity=0.05, real = True):
 
     # Execute the trajectory
     #print("Moving to Home...")
-    if not real:
-        execute_trajectory(robot, full_home_traj)
-    else:
-        robot.move_trajectory(full_home_traj, dt)
+    #if not real:
+        #execute_trajectory(robot, full_home_traj)
+    #else:
+        #robot.move_trajectory(full_home_traj, dt)
     
     #print("✅ Robot is perfectly Homed and Rigidlly Settled!")

@@ -38,7 +38,7 @@ from src.skills.real_sweep import real_sweep_until_contact, ParticleVisualizer
 # Disable to run locally: set USE_RAY=False  
 # note: if USE_RAY=false it will use the CPU which is slower on the MujocoWarp so for testing/development <50 particles use the pos_estimation_2d.py
 # script because it will run a small amount of particles faster. 
-USE_RAY = True
+USE_RAY = False
 RAY_ADDRESS = f"ray://{os.environ.get('SIMBAY_RAY_IP', 'localhost')}:10002"
 RAY_NUM_GPUS = 1.0
 RAY_DEBUG = True
@@ -50,7 +50,7 @@ WARP_DEVICE = "cuda:0" if USE_RAY else "cpu" # use the gpu on the remote compute
 USE_REAL_ROBOT = True
 
 # Filter Configuration
-NUM_PARTICLES = 1500
+NUM_PARTICLES = 1
 ESS_THRESHOLD = 0.5
 
 # Workspace Limits (Y)
@@ -62,7 +62,7 @@ FIXED_Z = 0.08
 MAX_BLOCK_HALF_SIZE_Y = 0.075 
 MAX_BLOCK_HALF_SIZE_X = 0.125
 SAFETY_DISTANCE = 0.02
-SWEEP_VEL = 0.01
+SWEEP_VEL = 0.1
 
 
 def track_ground_truth(robot):
@@ -151,7 +151,7 @@ def main():
 
     if not USE_REAL_ROBOT: print(f"🛑 Ground Truth After Swipe 1: {track_ground_truth(robot):.3f}")
 
-
+    """
     # ==========================================
     # PHASE 2: SWEEP BACKWARD (-Y)
     # ==========================================
@@ -255,6 +255,6 @@ def main():
                             save_path=f"{output_folder}/x_axis_evolution.png")
     
     
-
+    """
 if __name__ == "__main__":
     main()

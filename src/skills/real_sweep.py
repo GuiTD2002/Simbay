@@ -33,7 +33,7 @@ class ParticleVisualizer(Node):
 
         for i in range(len(particles)):
             marker = Marker()
-            marker.header.frame_id = "base" 
+            marker.header.frame_id = "panda_link0" 
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = "particles"
             marker.id = i
@@ -80,6 +80,7 @@ class ParticleVisualizer(Node):
 
 
 def debug_pf_y(pf, label=""):
+    return
     y = pf.particles[:, 1]
     ess = 1.0 / np.sum(pf.weights ** 2)
     top = np.argsort(pf.weights)[-5:][::-1]
@@ -116,7 +117,11 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
 
     total_duration = len(sweep_traj) * robot.dt
     print(f"[REAL SWEEP] Firing async trajectory. Listening for contact...")
-    robot.move_trajectory_async(sweep_traj, robot.dt)
+
+    #import time
+    
+    robot.original_move_trajectory(sweep_traj, robot.dt,assinc=True)
+    #time.sleep(1)
 
     # ==========================================
     # PRE-LOOP SETUP (Raw Data Mode)
@@ -124,8 +129,8 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
     torque_history = deque(maxlen=50) # Standard 50-step history
     
 
-    delta_threshold = 0.4
-
+    #delta_threshold = 0.4
+    force_threshold = 8.0
     
     # Distance Setup for Transient Masking
     actual_start_pos = robot.get_ee_pos() 
@@ -144,11 +149,17 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
     while True:
         elapsed_time = time.perf_counter() - start_time
         
+        
         if elapsed_time > total_duration:
+            print("Debug elapsed_time > total_duration")
             break
-            
+         
+
         full_measurements = robot.get_torque_reads() 
         current_torque_norm = np.linalg.norm(full_measurements[:3]) 
+
+        force_reads = robot.get_force_reads()[:2]
+        current_force_norm = np.linalg.norm(force_reads)
         
         current_ee_pos = robot.get_ee_pos()
         distance_traveled = np.linalg.norm(current_ee_pos - actual_start_pos)
@@ -156,6 +167,14 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
         # ==========================================
         # 4. TRANSIENT MASKING (No EMA Smoothing)
         # ==========================================
+        #print(f'dists: {distance_traveled} < {safe_blind_distance}')
+        if distance_traveled < safe_blind_distance:
+            contact = 0
+        else:
+            if current_force_norm > force_threshold:
+                print(f'Bateu! FORCA: {current_force_norm}')
+                contact = 1
+        """
         if distance_traveled < safe_blind_distance:
             # BLIND PERIOD: We are accelerating. Do absolutely nothing.
             contact = 0
@@ -176,7 +195,7 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
             else:
                 # Still building initial history
                 torque_history.append(current_torque_norm)
-
+        """
         # ==========================================
         # 5. ESTIMATE (Math Layer)
         # ==========================================
@@ -249,7 +268,7 @@ def real_sweep_until_contact(robot, particle_filter, start_pos, end_pos, target_
         # 7. THE HARDWARE LOCK 
         # ==========================================
         # Force the loop to pause and wait for the next 1000Hz tick!
-        robot.sync()
+        #robot.sync()
 
     # ... (Plotting code remains the same) ...
     
@@ -287,24 +306,28 @@ def _real_prepare_sweep(robot, current_joints, start_pos, sweep_direction, targe
     hover_settle = plan_settle_trajectory(hover_traj[-1], 0.5, robot.dt)
     traj_hover = stitch_trajectories(hover_traj, hover_settle)
 
-    prep_traj = plan_cartesian_trajectory(traj_hover[-1], prep_pos, target_quat, 0.05, robot.dt)
+
+
+    
+    print(f"   -> Moving to hover position...")
+    robot.original_move_trajectory(traj_hover, robot.dt)
+
+
+    prep_traj = plan_cartesian_trajectory(robot.get_joints_pos(), prep_pos, target_quat, 0.05, robot.dt)
     prep_settle = plan_settle_trajectory(prep_traj[-1], 0.5, robot.dt)
     traj_prep = stitch_trajectories(prep_traj, prep_settle)
     
     start_traj = plan_cartesian_trajectory(traj_prep[-1], start_pos, target_quat, sweep_vel, robot.dt)
 
     
-    print(f"   -> Moving to hover position...")
-    robot.move_trajectory(traj_hover, robot.dt)
-    
     print(f"   -> Moving to prep position...")
-    robot.move_trajectory(traj_prep, robot.dt)
+    robot.original_move_trajectory(traj_prep, robot.dt)
     
     #print(f"   -> Moving to start position...")
     #robot.move_trajectory(start_traj, robot.dt)
 
 
-#This is not being used
+
 def _real_execute_safe_retreat(robot, sweep_direction):
     """Safely backs the robot away from the block in cartesian space."""
     safety_distance = 0.01
@@ -323,7 +346,7 @@ def _real_execute_safe_retreat(robot, sweep_direction):
     full_exit_traj = stitch_trajectories(retreat_traj, settle_traj)
 
     print(f"[REAL SWEEP] Safely retreating...")
-    robot.move_trajectory(full_exit_traj, robot.dt)
+    robot.original_move_trajectory(full_exit_traj, robot.dt)
 
 
 
